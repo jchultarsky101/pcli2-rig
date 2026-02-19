@@ -5,9 +5,15 @@ All notable changes to PCLI2-RIG will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-02-19
 
 ### Added
+- **MCP Image Content Support** - Automatic MIME type detection for thumbnail images
+  - Detects base64 image data from MCP thumbnail/image tools
+  - Wraps base64 in proper MCP image content format with correct MIME type
+  - Supports PNG, JPEG, GIF, and WebP image format auto-detection
+  - Enables Claude Desktop to render thumbnail images inline via artifacts
+  - Comprehensive unit tests for image content conversion
 - **CPU Usage Sparkline** - Real-time CPU monitoring displayed in status bar during LLM requests
 - **Command History** - Bash-style Up/Down arrow navigation for previous inputs
 - **Horizontal Log Scrolling** - Scroll long log lines with ←/→ arrow keys
@@ -31,6 +37,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `gilt` crate for Unicode sparkline rendering
 - Added `tokio-util` for request cancellation support
 - Filtered noisy markdown parser warnings (HTML, unsupported syntaxes)
+- Added `try_convert_to_image_content` method to `SimpleMcpClient`
+- Enhanced tool result parsing to detect and convert image data
+- Added 6 unit tests covering image detection, MIME type detection, and edge cases
+
+## [Unreleased]
+
+<!-- No unreleased changes yet -->
 
 ## [0.1.0] - 2026-02-19
 
