@@ -330,6 +330,7 @@ fn setup_mcp_config(config_path: &str) -> Result<()> {
     println!();
     println!("You can now run: pcli2-rig");
     println!("Or edit config at: {}", config_file.display());
+    println!();
 
     Ok(())
 }
