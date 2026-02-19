@@ -7,9 +7,180 @@ use rig::{
     providers::ollama,
     tool::server::ToolServer,
 };
+use serde_json::json;
 use tracing::{debug, info};
 
 use crate::config::{Config, McpServerConfig};
+
+/// Simple MCP client for HTTP POST-based servers like pcli2-mcp
+struct SimpleMcpClient {
+    client: reqwest::Client,
+    url: String,
+}
+
+impl Clone for SimpleMcpClient {
+    fn clone(&self) -> Self {
+        Self {
+            client: self.client.clone(),
+            url: self.url.clone(),
+        }
+    }
+}
+
+impl SimpleMcpClient {
+    fn new(url: String) -> Self {
+        Self {
+            client: reqwest::Client::new(),
+            url,
+        }
+    }
+
+    async fn initialize(&self) -> Result<()> {
+        let request = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "pcli2-rig",
+                    "version": "0.1.0"
+                }
+            }
+        });
+
+        let response = self.client
+            .post(&self.url)
+            .json(&request)
+            .send()
+            .await
+            .context("Failed to send initialize request")?;
+
+        if !response.status().is_success() {
+            anyhow::bail!("Initialize failed with status: {}", response.status());
+        }
+
+        Ok(())
+    }
+
+    async fn list_tools(&self) -> Result<Vec<rmcp::model::Tool>> {
+        let request = json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/list",
+            "params": {}
+        });
+
+        let response = self.client
+            .post(&self.url)
+            .json(&request)
+            .send()
+            .await
+            .context("Failed to send tools/list request")?;
+
+        if !response.status().is_success() {
+            anyhow::bail!("tools/list failed with status: {}", response.status());
+        }
+
+        let result: serde_json::Value = response.json().await?;
+        
+        // Parse the response to extract tools
+        if let Some(result_value) = result.get("result").and_then(|r| r.get("tools")) {
+            let tools: Vec<rmcp::model::Tool> = serde_json::from_value(result_value.clone())
+                .context("Failed to parse tools response")?;
+            Ok(tools)
+        } else {
+            Ok(Vec::new())
+        }
+    }
+
+    async fn call_tool(&self, name: &str, arguments: serde_json::Value) -> Result<String> {
+        let request = json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+                "name": name,
+                "arguments": arguments
+            }
+        });
+
+        let response = self.client
+            .post(&self.url)
+            .json(&request)
+            .send()
+            .await
+            .context("Failed to send tools/call request")?;
+
+        if !response.status().is_success() {
+            anyhow::bail!("tools/call failed with status: {}", response.status());
+        }
+
+        let result: serde_json::Value = response.json().await?;
+        
+        // Parse the response to extract tool result
+        if let Some(result_value) = result.get("result") {
+            // Convert result to string representation
+            Ok(serde_json::to_string_pretty(result_value)?)
+        } else if let Some(error) = result.get("error") {
+            anyhow::bail!("Tool call error: {}", error);
+        } else {
+            Ok("Tool executed successfully (no result)".to_string())
+        }
+    }
+}
+
+/// A Rig tool that wraps an MCP tool
+#[derive(Clone)]
+struct McpRigTool {
+    definition: rmcp::model::Tool,
+    client: SimpleMcpClient,
+    server_name: String,
+}
+
+impl McpRigTool {
+    fn new(definition: rmcp::model::Tool, client: SimpleMcpClient, server_name: String) -> Self {
+        Self {
+            definition,
+            client,
+            server_name,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct McpToolError(String);
+
+impl std::fmt::Display for McpToolError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::error::Error for McpToolError {}
+
+impl rig::tool::Tool for McpRigTool {
+    const NAME: &'static str = "mcp_tool";
+    type Error = McpToolError;
+    type Args = serde_json::Value;
+    type Output = String;
+
+    async fn definition(&self, _prompt: String) -> rig::completion::ToolDefinition {
+        rig::completion::ToolDefinition {
+            name: self.definition.name.to_string(),
+            description: self.definition.description.clone().unwrap_or_default().to_string(),
+            parameters: self.definition.schema_as_json_value(),
+        }
+    }
+
+    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!("Calling MCP tool '{}' on server '{}'", self.definition.name, self.server_name);
+        self.client.call_tool(&self.definition.name, args)
+            .await
+            .map_err(|e| McpToolError(e.to_string()))
+    }
+}
 
 /// Represents a chat message in the conversation
 #[derive(Debug, Clone, PartialEq)]
@@ -91,31 +262,23 @@ impl Agent {
                 server.name, server.url
             );
 
-            // Try to connect to the MCP server using Streamable HTTP transport
+            // Try to connect to the MCP server using simple HTTP client
             match self.connect_mcp_server(&server.url, &server.name).await {
-                Ok(running_service) => {
-                    info!("Connected to MCP server '{}'", server.name);
-                    
-                    // Get the peer (server sink) for tool calls
-                    let peer = running_service.peer().clone();
-                    
-                    // List available tools from this server
-                    match peer.list_tools(Default::default()).await {
-                        Ok(tools_response) => {
-                            info!("Found {} tools from MCP server '{}'", tools_response.tools.len(), server.name);
-                            
-                            // Register each tool with the tool server
-                            for tool in tools_response.tools {
-                                info!("Registering MCP tool: {}", tool.name);
-                                tool_server = tool_server.rmcp_tool(tool, peer.clone());
-                            }
-                            
-                            self.mcp_connected.push(server.name.clone());
-                        }
-                        Err(e) => {
-                            tracing::warn!("Failed to list tools from MCP server '{}': {}", server.name, e);
-                        }
+                Ok((client, tools)) => {
+                    info!("Connected to MCP server '{}': {} tools", server.name, tools.len());
+
+                    // Create custom Rig tools for each MCP tool
+                    for tool in &tools {
+                        info!("Registering MCP tool: {}", tool.name);
+                        let mcp_tool = McpRigTool::new(
+                            tool.clone(),
+                            client.clone(),
+                            server.name.clone(),
+                        );
+                        tool_server = tool_server.tool(mcp_tool);
                     }
+
+                    self.mcp_connected.push(server.name.clone());
                 }
                 Err(e) => {
                     tracing::warn!("Failed to connect to MCP server '{}': {}", server.name, e);
@@ -126,7 +289,7 @@ impl Agent {
         // Start the tool server and get a handle
         if !self.mcp_connected.is_empty() {
             let handle = tool_server.run();
-            
+
             // Update preamble to mention MCP tools
             let tool_defs = match handle.get_tool_defs(None).await {
                 Ok(defs) => defs,
@@ -159,19 +322,17 @@ You are running on the user's local machine via Ollama."#,
         }
     }
 
-    /// Connect to a single MCP server using Streamable HTTP transport
-    async fn connect_mcp_server(&self, url: &str, _name: &str) -> Result<rmcp::service::RunningService<rmcp::RoleClient, ()>> {
-        use rmcp::{ServiceExt, transport::streamable_http_client::StreamableHttpClientTransport};
+    /// Connect to a single MCP server using simple HTTP client
+    async fn connect_mcp_server(&self, url: &str, _name: &str) -> Result<(SimpleMcpClient, Vec<rmcp::model::Tool>)> {
+        let client = SimpleMcpClient::new(url.to_string());
         
-        // Create transport from URL
-        let transport = StreamableHttpClientTransport::from_uri(url);
+        // Initialize the connection
+        client.initialize().await?;
         
-        // Serve the client
-        let client = ().serve(transport)
-            .await
-            .context("Failed to serve MCP client")?;
+        // List available tools
+        let tools = client.list_tools().await?;
         
-        Ok(client)
+        Ok((client, tools))
     }
 
     /// Default system preamble
