@@ -180,6 +180,10 @@ impl rig::tool::Tool for McpRigTool {
             .await
             .map_err(|e| McpToolError(e.to_string()))
     }
+
+    fn name(&self) -> String {
+        self.definition.name.to_string()
+    }
 }
 
 /// Represents a chat message in the conversation
