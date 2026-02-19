@@ -88,6 +88,8 @@ pub struct App {
     history_index: usize,
     /// Temporary storage for original input when browsing history
     history_original: String,
+    /// Horizontal scroll offset for input (when text exceeds width)
+    input_hscroll_offset: usize,
 }
 
 impl App {
@@ -123,6 +125,7 @@ impl App {
             input_history: Vec::new(),
             history_index: 0,
             history_original: String::new(),
+            input_hscroll_offset: 0,
         }
     }
 
@@ -341,6 +344,8 @@ Type /help for available commands · Type /quit to exit
                 if self.focus_pane == 1 {
                     self.input.insert(self.cursor_pos, c);
                     self.cursor_pos += 1;
+                    // Auto-scroll to keep cursor visible
+                    self.adjust_input_scroll();
                 }
             }
 
@@ -349,6 +354,8 @@ Type /help for available commands · Type /quit to exit
                 if self.focus_pane == 1 && self.cursor_pos > 0 {
                     self.input.remove(self.cursor_pos - 1);
                     self.cursor_pos -= 1;
+                    // Auto-scroll to keep cursor visible
+                    self.adjust_input_scroll();
                 }
             }
 
@@ -356,6 +363,8 @@ Type /help for available commands · Type /quit to exit
             KeyCode::Delete => {
                 if self.focus_pane == 1 && self.cursor_pos < self.input.len() {
                     self.input.remove(self.cursor_pos);
+                    // Auto-scroll to keep cursor visible
+                    self.adjust_input_scroll();
                 }
             }
 
@@ -363,6 +372,8 @@ Type /help for available commands · Type /quit to exit
             KeyCode::Left => {
                 if self.focus_pane == 1 && self.cursor_pos > 0 {
                     self.cursor_pos -= 1;
+                    // Auto-scroll to keep cursor visible
+                    self.adjust_input_scroll();
                 } else if self.focus_pane == 2 {
                     // Logs: horizontal scroll left
                     self.log_hscroll_offset = self.log_hscroll_offset.saturating_sub(1);
@@ -371,6 +382,8 @@ Type /help for available commands · Type /quit to exit
             KeyCode::Right => {
                 if self.focus_pane == 1 && self.cursor_pos < self.input.len() {
                     self.cursor_pos += 1;
+                    // Auto-scroll to keep cursor visible
+                    self.adjust_input_scroll();
                 } else if self.focus_pane == 2 {
                     // Logs: horizontal scroll right
                     self.log_hscroll_offset = self.log_hscroll_offset.saturating_add(1);
@@ -379,6 +392,7 @@ Type /help for available commands · Type /quit to exit
             KeyCode::Home => {
                 if self.focus_pane == 1 {
                     self.cursor_pos = 0;
+                    self.input_hscroll_offset = 0;
                 } else if self.focus_pane == 2 {
                     // Logs: scroll to beginning of line
                     self.log_hscroll_offset = 0;
@@ -387,6 +401,8 @@ Type /help for available commands · Type /quit to exit
             KeyCode::End => {
                 if self.focus_pane == 1 {
                     self.cursor_pos = self.input.len();
+                    // Scroll to show end of input
+                    self.input_hscroll_offset = self.input.len().saturating_sub(80);
                 } else if self.focus_pane == 2 {
                     // Logs: scroll to end of line (max value)
                     self.log_hscroll_offset = usize::MAX;
@@ -868,6 +884,11 @@ Type /help for available commands · Type /quit to exit
         self.cursor_pos
     }
 
+    /// Get input horizontal scroll offset
+    pub fn input_hscroll_offset(&self) -> usize {
+        self.input_hscroll_offset
+    }
+
     /// Get logs
     pub fn logs(&self) -> &[String] {
         &self.logs
@@ -963,6 +984,21 @@ Type /help for available commands · Type /quit to exit
             self.input = self.history_original.clone();
         }
         self.cursor_pos = self.input.len(); // Move cursor to end
+    }
+
+    /// Adjust input horizontal scroll to keep cursor visible
+    pub fn adjust_input_scroll(&mut self) {
+        // If cursor is before scroll offset, scroll left
+        if self.cursor_pos < self.input_hscroll_offset {
+            self.input_hscroll_offset = self.cursor_pos;
+        }
+        // If cursor is beyond visible area, scroll right
+        // Assume ~80 chars visible as a reasonable default
+        // The UI will handle the actual visible width
+        let visible_chars = 80; // Approximate, UI handles actual width
+        if self.cursor_pos >= self.input_hscroll_offset + visible_chars {
+            self.input_hscroll_offset = self.cursor_pos.saturating_sub(visible_chars - 1);
+        }
     }
 
     /// Get CPU history for sparkline rendering

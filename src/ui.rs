@@ -300,22 +300,24 @@ fn render_input(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
         ])]
     };
 
-    let input = Paragraph::new(input_text).block(
-        Block::default()
-            .title({
-                let model = app.agent().model_name();
-                let mcp_count = app.agent().mcp_server_count();
-                if mcp_count > 0 {
-                    format!(" Input │ {} │ 🔌{} ", model, mcp_count)
-                } else {
-                    format!(" Input │ {} ", model)
-                }
-            })
-            .title_style(Style::default().fg(border_color))
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(border_color))
-            .style(Style::default().bg(colors::BACKGROUND)),
-    );
+    let input = Paragraph::new(input_text)
+        .block(
+            Block::default()
+                .title({
+                    let model = app.agent().model_name();
+                    let mcp_count = app.agent().mcp_server_count();
+                    if mcp_count > 0 {
+                        format!(" Input │ {} │ 🔌{} ", model, mcp_count)
+                    } else {
+                        format!(" Input │ {} ", model)
+                    }
+                })
+                .title_style(Style::default().fg(border_color))
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(border_color))
+                .style(Style::default().bg(colors::BACKGROUND)),
+        )
+        .scroll((0, app.input_hscroll_offset() as u16));
 
     frame.render_widget(input, area);
 }
