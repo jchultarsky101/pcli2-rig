@@ -9,7 +9,7 @@
 use anyhow::Result;
 use clap::Parser;
 use std::sync::{Arc, Mutex};
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 use app::{App, LOG_BUFFER};
 use config::Config;
@@ -33,7 +33,12 @@ struct Args {
     model: String,
 
     /// Ollama server URL
-    #[arg(short = 'H', long, env = "OLLAMA_HOST", default_value = "http://localhost:11434")]
+    #[arg(
+        short = 'H',
+        long,
+        env = "OLLAMA_HOST",
+        default_value = "http://localhost:11434"
+    )]
     host: String,
 
     /// YOLO mode: skip confirmation for destructive tools
@@ -81,9 +86,7 @@ async fn main() -> Result<()> {
             .with(filter)
             .init();
     } else {
-        tracing_subscriber::registry()
-            .with(filter)
-            .init();
+        tracing_subscriber::registry().with(filter).init();
     }
 
     tracing::info!("Starting PCLI2-RIG with model: {}", args.model);
@@ -138,21 +141,21 @@ impl std::io::Write for DualWriter {
         // Write to file
         let mut file = self.file.as_ref();
         file.write(buf)?;
-        
+
         // Write to shared buffer (for UI display)
         if let Ok(line) = std::str::from_utf8(buf) {
             let line = line.trim().to_string();
-            if !line.is_empty() {
-                if let Ok(mut buffer) = self.buffer.lock() {
-                    buffer.push(line);
-                    // Keep only last 100 lines
-                    if buffer.len() > 100 {
-                        buffer.remove(0);
-                    }
+            if !line.is_empty()
+                && let Ok(mut buffer) = self.buffer.lock()
+            {
+                buffer.push(line);
+                // Keep only last 100 lines
+                if buffer.len() > 100 {
+                    buffer.remove(0);
                 }
             }
         }
-        
+
         Ok(buf.len())
     }
 

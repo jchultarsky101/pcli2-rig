@@ -75,6 +75,7 @@ impl Agent {
     }
 
     /// Connect to MCP servers and discover tools
+    #[allow(dead_code)]
     pub async fn connect_mcp_servers(&mut self, servers: &[McpServerConfig]) {
         info!("Connecting to {} MCP servers", servers.len());
 
@@ -83,12 +84,19 @@ impl Agent {
                 continue;
             }
 
-            info!("Connecting to MCP server: {} at {}", server.name, server.url);
+            info!(
+                "Connecting to MCP server: {} at {}",
+                server.name, server.url
+            );
 
             // Try to connect to the MCP server
             match self.connect_mcp_server(&server.url, &server.name).await {
                 Ok(tools) => {
-                    info!("Connected to MCP server '{}': {} tools available", server.name, tools.len());
+                    info!(
+                        "Connected to MCP server '{}': {} tools available",
+                        server.name,
+                        tools.len()
+                    );
                     self.mcp_tools.extend(tools);
                     self.mcp_connected.push(server.name.clone());
                 }
@@ -151,7 +159,8 @@ When using tools:
 3. Explain what you're doing and what the results mean
 
 Be concise but helpful. Use formatting like code blocks when appropriate.
-You are running on the user's local machine via Ollama."#.to_string()
+You are running on the user's local machine via Ollama."#
+            .to_string()
     }
 
     /// Add a user message to the chat
@@ -212,10 +221,10 @@ You are running on the user's local machine via Ollama."#.to_string()
     pub async fn chat_without_history(&mut self, _user_message: String) -> Result<String> {
         // Send request and get response
         let response = self.send_request().await?;
-        
+
         // Add assistant response to history
         self.add_assistant_message(response.clone());
-        
+
         Ok(response)
     }
 
@@ -226,10 +235,10 @@ You are running on the user's local machine via Ollama."#.to_string()
 
         // Send request and get response
         let response = self.send_request().await?;
-        
+
         // Add assistant response to history
         self.add_assistant_message(response.clone());
-        
+
         Ok(response)
     }
 
@@ -239,7 +248,8 @@ You are running on the user's local machine via Ollama."#.to_string()
         debug!("Chat history has {} messages", self.chat_history.len());
 
         // Build the agent with preamble
-        let agent = self.client
+        let agent = self
+            .client
             .agent(&self.model_name)
             .preamble(&self.preamble)
             .build();
@@ -268,18 +278,15 @@ You are running on the user's local machine via Ollama."#.to_string()
         debug!("Prompt text length: {} chars", prompt_text.len());
 
         // Send the request with detailed error handling
-        let response = agent
-            .prompt(prompt_text)
-            .await
-            .map_err(|e| {
-                anyhow::anyhow!(
-                    "Ollama request failed: {}\n\n\
+        let response = agent.prompt(prompt_text).await.map_err(|e| {
+            anyhow::anyhow!(
+                "Ollama request failed: {}\n\n\
                      Make sure Ollama is running (`ollama serve`) and \
                      the model is pulled (`ollama pull {}`).",
-                    e,
-                    self.model_name
-                )
-            })?;
+                e,
+                self.model_name
+            )
+        })?;
 
         debug!("Received response: {} chars", response.len());
 
@@ -288,34 +295,30 @@ You are running on the user's local machine via Ollama."#.to_string()
 }
 
 /// Execute a tool call
-pub async fn execute_tool_call(
-    tool_name: &str,
-    arguments: &str,
-) -> Result<String> {
+pub async fn execute_tool_call(tool_name: &str, arguments: &str) -> Result<String> {
     debug!("Executing tool: {} with args: {}", tool_name, arguments);
 
-    let args: serde_json::Value = serde_json::from_str(arguments)
-        .context("Failed to parse tool arguments")?;
+    let args: serde_json::Value =
+        serde_json::from_str(arguments).context("Failed to parse tool arguments")?;
 
     let result = match tool_name {
         "read_file" => {
             let path = args["path"].as_str().context("Missing 'path' argument")?;
-            let contents = std::fs::read_to_string(path)
-                .context("Failed to read file")?;
+            let contents = std::fs::read_to_string(path).context("Failed to read file")?;
             format!("Contents of {}:\n\n{}", path, contents)
         }
         "write_file" => {
             let path = args["path"].as_str().context("Missing 'path' argument")?;
-            let content = args["content"].as_str().context("Missing 'content' argument")?;
-            std::fs::write(path, content)
-                .context("Failed to write file")?;
+            let content = args["content"]
+                .as_str()
+                .context("Missing 'content' argument")?;
+            std::fs::write(path, content).context("Failed to write file")?;
             format!("Successfully wrote {} bytes to {}", content.len(), path)
         }
         "list_directory" => {
             let path = args["path"].as_str().context("Missing 'path' argument")?;
-            let entries = std::fs::read_dir(path)
-                .context("Failed to read directory")?;
-            
+            let entries = std::fs::read_dir(path).context("Failed to read directory")?;
+
             let mut result = String::new();
             for entry in entries {
                 let entry = entry.context("Failed to read directory entry")?;
@@ -331,13 +334,15 @@ pub async fn execute_tool_call(
             format!("Contents of {}:\n\n{}", path, result)
         }
         "run_command" => {
-            let command = args["command"].as_str().context("Missing 'command' argument")?;
+            let command = args["command"]
+                .as_str()
+                .context("Missing 'command' argument")?;
             let output = std::process::Command::new("bash")
                 .arg("-c")
                 .arg(command)
                 .output()
                 .context("Failed to run command")?;
-            
+
             let mut result = String::new();
             result.push_str(&format!("Command: {}\n\n", command));
             if !output.stdout.is_empty() {
@@ -350,24 +355,33 @@ pub async fn execute_tool_call(
                 result.push_str(&String::from_utf8_lossy(&output.stderr));
                 result.push('\n');
             }
-            result.push_str(&format!("Exit code: {}", output.status.code().unwrap_or(-1)));
+            result.push_str(&format!(
+                "Exit code: {}",
+                output.status.code().unwrap_or(-1)
+            ));
             result
         }
         "search_code" => {
-            let pattern = args["pattern"].as_str().context("Missing 'pattern' argument")?;
+            let pattern = args["pattern"]
+                .as_str()
+                .context("Missing 'pattern' argument")?;
             let mut cmd = std::process::Command::new("grep");
             cmd.arg("-rn").arg("--color=never").arg(pattern).arg(".");
-            
+
             if let Some(glob) = args["glob"].as_str() {
                 cmd.arg("--include").arg(glob);
             }
-            
+
             let output = cmd.output().context("Failed to run grep")?;
-            
+
             if output.stdout.is_empty() {
                 "No matches found.".to_string()
             } else {
-                format!("Search results for '{}':\n\n{}", pattern, String::from_utf8_lossy(&output.stdout))
+                format!(
+                    "Search results for '{}':\n\n{}",
+                    pattern,
+                    String::from_utf8_lossy(&output.stdout)
+                )
             }
         }
         _ => {

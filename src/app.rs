@@ -65,6 +65,10 @@ pub struct App {
     focus_pane: usize,
     /// Queue of messages waiting to be sent
     message_queue: Vec<String>,
+    /// Whether help modal is shown
+    show_help: bool,
+    /// Scroll offset for help modal
+    help_scroll_offset: usize,
 }
 
 impl App {
@@ -88,13 +92,15 @@ impl App {
             log_scroll_offset: 0,
             focus_pane: 1, // Start with input focused
             message_queue: Vec::new(),
+            show_help: false,
+            help_scroll_offset: 0,
         }
     }
 
     /// Run the application main loop
     pub async fn run(&mut self, tui: &mut Tui) -> Result<()> {
         info!("Starting application main loop");
-        
+
         // Create channel for async responses
         let (tx, mut rx) = mpsc::channel::<AppMessage>(32);
 
@@ -109,13 +115,13 @@ impl App {
             let agent_tx = tx.clone();
             tokio::spawn(async move {
                 // MCP connection would happen here in a real implementation
-                let _ = agent_tx.send(AppMessage::McpConnected);
+                std::mem::drop(agent_tx.send(AppMessage::McpConnected).await);
             });
         }
 
         // Timer for spinner animation (500ms interval)
         let mut spinner_timer = tokio::time::interval(std::time::Duration::from_millis(500));
-        
+
         // Timer for syncing logs (200ms interval)
         let mut log_timer = tokio::time::interval(std::time::Duration::from_millis(200));
 
@@ -174,13 +180,18 @@ impl App {
 
   Type /help for available commands
   Type /quit to exit
-"#.to_string();
-        
+"#
+        .to_string();
+
         self.agent.add_assistant_message(banner);
     }
 
     /// Handle an event
-    async fn handle_event(&mut self, event: crossterm::event::Event, tx: &mpsc::Sender<AppMessage>) -> Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: crossterm::event::Event,
+        tx: &mpsc::Sender<AppMessage>,
+    ) -> Result<()> {
         use crossterm::event::KeyCode;
 
         // If there's a pending tool call, handle confirmation first
@@ -216,8 +227,40 @@ impl App {
     }
 
     /// Handle a key event
-    async fn handle_key_event(&mut self, key: KeyEvent, tx: &mpsc::Sender<AppMessage>) -> Result<()> {
+    async fn handle_key_event(
+        &mut self,
+        key: KeyEvent,
+        tx: &mpsc::Sender<AppMessage>,
+    ) -> Result<()> {
         use crossterm::event::{KeyCode, KeyModifiers};
+
+        // Handle help modal
+        if self.show_help {
+            match key.code {
+                KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => {
+                    self.show_help = false;
+                    return Ok(());
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    self.help_scroll_offset = self.help_scroll_offset.saturating_sub(1);
+                    return Ok(());
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    self.help_scroll_offset += 1;
+                    return Ok(());
+                }
+                KeyCode::PageUp => {
+                    self.help_scroll_offset = self.help_scroll_offset.saturating_sub(10);
+                    return Ok(());
+                }
+                KeyCode::PageDown => {
+                    self.help_scroll_offset += 10;
+                    return Ok(());
+                }
+                _ => {}
+            }
+            return Ok(());
+        }
 
         match key.code {
             // Quit
@@ -389,7 +432,7 @@ impl App {
             // Add timeout to prevent hanging (10 minutes)
             let result = tokio::time::timeout(
                 std::time::Duration::from_secs(600),
-                agent.chat_without_history(input)
+                agent.chat_without_history(input),
             )
             .await
             .unwrap_or(Err(anyhow::anyhow!("Request timed out after 10 minutes")));
@@ -403,7 +446,11 @@ impl App {
     }
 
     /// Handle the response from the async task
-    async fn handle_response(&mut self, msg: AppMessage, tx: &mpsc::Sender<AppMessage>) -> Result<()> {
+    async fn handle_response(
+        &mut self,
+        msg: AppMessage,
+        tx: &mpsc::Sender<AppMessage>,
+    ) -> Result<()> {
         match msg {
             AppMessage::Response(Ok(response)) => {
                 self.is_thinking = false;
@@ -417,14 +464,18 @@ impl App {
                     self.status = "✓ Ready".to_string();
                     tracing::info!("handle_response: adding assistant message to history");
                     self.agent.add_assistant_message(response.clone());
-                    tracing::info!("handle_response: history now has {} messages", self.agent.chat_history().len());
+                    tracing::info!(
+                        "handle_response: history now has {} messages",
+                        self.agent.chat_history().len()
+                    );
                 }
                 debug!("Agent response: {}", response);
             }
             AppMessage::Response(Err(e)) => {
                 self.is_thinking = false;
                 self.status = format!("✗ Error: {}", e);
-                self.agent.add_assistant_message(format!("⚠ **Error:** {}", e));
+                self.agent
+                    .add_assistant_message(format!("⚠ **Error:** {}", e));
                 tracing::error!("Received error: {}", e);
             }
             AppMessage::McpConnected => {
@@ -432,7 +483,8 @@ impl App {
                 let count = self.agent.mcp_server_count();
                 if count > 0 {
                     self.status = format!("✓ {} MCP server(s) connected", count);
-                    self.agent.add_assistant_message(format!("🔌 Connected to {} MCP server(s): {}", 
+                    self.agent.add_assistant_message(format!(
+                        "🔌 Connected to {} MCP server(s): {}",
                         count,
                         self.agent.mcp_connected().join(", ")
                     ));
@@ -448,7 +500,7 @@ impl App {
             // Concatenate all queued messages with newlines
             let combined = self.message_queue.join("\n\n");
             self.message_queue.clear();
-            
+
             // Send the combined message
             self.input = combined;
             self.send_message(tx).await?;
@@ -459,13 +511,14 @@ impl App {
 
     /// Handle internal commands
     async fn handle_command(&mut self, input: &str) -> Result<()> {
-        let parts: Vec<&str> = input.trim().split_whitespace().collect();
+        let parts: Vec<&str> = input.split_whitespace().collect();
         let command = parts.first().map(|s| s.to_lowercase()).unwrap_or_default();
         let args: Vec<&str> = parts.iter().skip(1).copied().collect();
 
         match command.as_str() {
             "/help" | "/h" | "/?" => {
-                self.show_help();
+                self.show_help = true;
+                self.help_scroll_offset = 0;
             }
             "/quit" | "/exit" | "/q" => {
                 self.should_quit = true;
@@ -473,19 +526,27 @@ impl App {
             "/clear" | "/cls" => {
                 self.agent.clear_history();
                 self.status = "Chat history cleared".to_string();
-                self.agent.add_assistant_message("Chat history has been cleared.".to_string());
+                self.agent
+                    .add_assistant_message("Chat history has been cleared.".to_string());
             }
             "/model" => {
                 if args.is_empty() {
-                    self.agent.add_assistant_message(format!("Current model: {}", self.agent.model_name()));
+                    self.agent.add_assistant_message(format!(
+                        "Current model: {}",
+                        self.agent.model_name()
+                    ));
                 } else {
                     self.status = format!("Model changed to: {}", args[0]);
-                    self.agent.add_assistant_message(format!("Model setting updated to '{}' (requires restart to apply)", args[0]));
+                    self.agent.add_assistant_message(format!(
+                        "Model setting updated to '{}' (requires restart to apply)",
+                        args[0]
+                    ));
                 }
             }
             "/history" | "/hist" => {
                 let count = self.agent.chat_history().len();
-                self.agent.add_assistant_message(format!("Chat history contains {} messages.", count));
+                self.agent
+                    .add_assistant_message(format!("Chat history contains {} messages.", count));
             }
             "/status" => {
                 self.agent.add_assistant_message(format!(
@@ -497,13 +558,18 @@ impl App {
             }
             "/yolo" => {
                 self.status = "YOLO mode toggled (feature pending)".to_string();
-                self.agent.add_assistant_message("YOLO mode toggle requested. This feature is coming soon!".to_string());
+                self.agent.add_assistant_message(
+                    "YOLO mode toggle requested. This feature is coming soon!".to_string(),
+                );
             }
             "/mcp" | "/mcp-servers" => {
                 self.handle_mcp_command(&args).await?;
             }
             _ => {
-                self.agent.add_assistant_message(format!("Unknown command: {}. Type /help for available commands.", command));
+                self.agent.add_assistant_message(format!(
+                    "Unknown command: {}. Type /help for available commands.",
+                    command
+                ));
             }
         }
 
@@ -517,19 +583,19 @@ impl App {
             let connected = self.agent.mcp_connected();
             let total = self.config.mcp_servers.len();
             let enabled = self.config.enabled_mcp_servers().len();
-            
-            let mut msg = format!("MCP Configuration:\n");
+
+            let mut msg = "MCP Configuration:\n".to_string();
             msg.push_str(&format!("  Configured servers: {}\n", total));
             msg.push_str(&format!("  Enabled: {}\n", enabled));
             msg.push_str(&format!("  Connected: {}\n\n", connected.len()));
-            
+
             if !connected.is_empty() {
                 msg.push_str("Connected servers:\n");
                 for server in connected {
                     msg.push_str(&format!("  ✓ {}\n", server));
                 }
             }
-            
+
             if total > 0 {
                 msg.push_str("\nCommands:\n");
                 msg.push_str("  /mcp list     - List all configured servers\n");
@@ -539,7 +605,7 @@ impl App {
                 msg.push_str("\nNo MCP servers configured.\n");
                 msg.push_str("Add servers by editing ~/.config/pcli2-rig/config.toml\n");
             }
-            
+
             self.agent.add_assistant_message(msg);
             return Ok(());
         }
@@ -556,18 +622,24 @@ impl App {
             "tools" => {
                 let tools = self.agent.mcp_tools();
                 if tools.is_empty() {
-                    self.agent.add_assistant_message("No MCP tools available. Connect to an MCP server first.".to_string());
+                    self.agent.add_assistant_message(
+                        "No MCP tools available. Connect to an MCP server first.".to_string(),
+                    );
                 } else {
                     let mut msg = String::from("Available MCP tools:\n");
                     for tool in tools {
-                        msg.push_str(&format!("  • {} (from {})\n    {}\n", tool.name, tool.server, tool.description));
+                        msg.push_str(&format!(
+                            "  • {} (from {})\n    {}\n",
+                            tool.name, tool.server, tool.description
+                        ));
                     }
                     self.agent.add_assistant_message(msg);
                 }
             }
             "add" => {
                 if args.len() < 3 {
-                    self.agent.add_assistant_message("Usage: /mcp add <name> <url>".to_string());
+                    self.agent
+                        .add_assistant_message("Usage: /mcp add <name> <url>".to_string());
                 } else {
                     self.agent.add_assistant_message(format!(
                         "To add MCP server '{}', edit ~/.config/pcli2-rig/config.toml\n\
@@ -581,52 +653,26 @@ impl App {
                 }
             }
             _ => {
-                self.agent.add_assistant_message(format!("Unknown MCP command: {}. Type /mcp for help.", args[0]));
+                self.agent.add_assistant_message(format!(
+                    "Unknown MCP command: {}. Type /mcp for help.",
+                    args[0]
+                ));
             }
         }
 
         Ok(())
     }
 
-    /// Show help message
-    fn show_help(&mut self) {
-        let help_text = r#"Available Commands:
-  /help, /h, /?     Show this help message
-  /quit, /exit, /q  Exit the application
-  /clear, /cls      Clear chat history
-  /model [name]     Show or set the current model
-  /history, /hist   Show message count
-  /status           Show current status
-  /mcp              Show MCP server status
-  /mcp list         List configured MCP servers
-  /mcp tools        Show available MCP tools
-  /yolo             Toggle YOLO mode (skip tool confirmation)
-
-Keyboard Shortcuts:
-  Enter             Send message
-  Ctrl+C            Quit
-  Ctrl+K            Clear chat history
-  ↑/↓               Scroll through history (when Chat/Logs focused)
-  PageUp/PageDown   Scroll faster (5 lines)
-  Tab               Switch focus between panes
-  Shift+Tab         Switch focus backwards
-  Mouse click       Click on pane to focus
-  Mouse wheel       Scroll in focused pane
-  Y/n               Confirm/cancel tool execution
-  Esc               Cancel tool execution"#;
-        self.agent.add_assistant_message(help_text.to_string());
-    }
-
     /// Execute the pending tool call
     async fn execute_pending_tool(&mut self) -> Result<()> {
         if let Some(pending) = self.pending_tool_call.take() {
             self.status = format!("Executing {}...", pending.tool_name);
-            
+
             match agent::execute_tool_call(&pending.tool_name, &pending.arguments).await {
                 Ok(result) => {
                     self.agent.add_tool_result(result.clone());
                     self.status = "Tool executed successfully".to_string();
-                    
+
                     // Send the tool result back to get the agent's response
                     let follow_up = format!("The tool returned:\n{}", result);
                     match self.agent.chat(follow_up).await {
@@ -726,9 +772,13 @@ Keyboard Shortcuts:
     }
 
     /// Handle mouse event for focus and scrolling
-    pub fn handle_mouse(&mut self, event: crossterm::event::MouseEvent, area: ratatui::layout::Rect) {
-        use crossterm::event::{MouseEventKind, MouseButton};
-        
+    pub fn handle_mouse(
+        &mut self,
+        event: crossterm::event::MouseEvent,
+        area: ratatui::layout::Rect,
+    ) {
+        use crossterm::event::{MouseButton, MouseEventKind};
+
         // Calculate pane boundaries (same as in ui.rs)
         let chunks = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Vertical)
@@ -739,7 +789,7 @@ Keyboard Shortcuts:
                 ratatui::layout::Constraint::Length(1), // Status
             ])
             .split(area);
-        
+
         match event.kind {
             MouseEventKind::Down(MouseButton::Left) => {
                 // Click to change focus
@@ -779,5 +829,117 @@ Keyboard Shortcuts:
     /// Check if currently thinking
     pub fn is_thinking(&self) -> bool {
         self.is_thinking
+    }
+
+    /// Check if help modal is shown
+    pub fn show_help(&self) -> bool {
+        self.show_help
+    }
+
+    /// Get help scroll offset
+    pub fn help_scroll_offset(&self) -> usize {
+        self.help_scroll_offset
+    }
+
+    /// Get detailed help text
+    pub fn get_help_text() -> &'static str {
+        r#"PCLI2-RIG - Local AI Agent
+═══════════════════════════════════════════════════════════
+
+A beautiful TUI-based AI coding assistant powered by Ollama.
+
+COMMANDS
+───────────────────────────────────────────────────────────
+
+/help, /h, /?     Show this help message
+/quit, /exit, /q  Exit the application
+/clear, /cls      Clear chat history
+/model [name]     Show or set the current model
+/history, /hist   Show message count
+/status           Show current status
+/mcp              Show MCP server status
+/mcp list         List configured MCP servers
+/mcp tools        Show available MCP tools
+/yolo             Toggle YOLO mode (skip tool confirmation)
+
+MOUSE CONTROLS
+───────────────────────────────────────────────────────────
+
+Left Click       Focus on clicked pane
+Scroll Wheel     Scroll in focused pane (3 lines)
+
+KEYBOARD SHORTCUTS
+───────────────────────────────────────────────────────────
+
+Global:
+  Ctrl+C          Quit application
+  Ctrl+K          Clear chat history
+  Tab             Switch focus between panes
+  Shift+Tab       Switch focus backwards
+  Esc             Close modal dialogs
+
+Input Pane (when focused):
+  Enter           Send message
+  ↑/↓             Move cursor in input
+  Home/End        Jump to start/end of input
+  Backspace       Delete character before cursor
+  Delete          Delete character at cursor
+  Ctrl+←/→        Jump by word (if supported)
+
+Chat History Pane (when focused):
+  ↑/↓             Scroll 1 line
+  PageUp/PageDown Scroll 5 lines
+
+Logs Pane (when focused):
+  ↑/↓             Scroll 1 line
+  PageUp/PageDown Scroll 5 lines
+
+Tool Confirmation:
+  Y/Enter         Confirm tool execution
+  N/Esc           Cancel tool execution
+
+PANES
+───────────────────────────────────────────────────────────
+
+Chat History [N]  - Conversation with AI (N = message count)
+                  - Shows user messages and AI responses
+                  - Markdown rendered for AI responses
+
+Input │ model │ 🔌N - Text input for messages
+                  - Model name shown in title
+                  - 🔌N shows N connected MCP servers
+
+Logs              - Real-time application logs
+                  - Color-coded by log level:
+                    ✗ Red = Errors
+                    ⚠ Yellow = Warnings
+                    ✓ Green = Info/Success
+                    ⋯ Cyan = Debug
+                    • Gray = Other
+
+Status            - Current application status
+                  - Animated spinner when processing
+
+CONFIGURATION
+───────────────────────────────────────────────────────────
+
+Config file: ~/.config/pcli2-rig/config.toml
+
+Example configuration:
+  model = "qwen2.5-coder:3b"
+  host = "http://localhost:11434"
+  yolo = false
+
+  [[mcp_servers]]
+  name = "filesystem"
+  url = "http://localhost:3000"
+  enabled = true
+
+LOGS
+───────────────────────────────────────────────────────────
+
+Application logs: ~/.local/state/pcli2-rig/pcli2-rig.log
+
+Press Esc, Enter, or 'q' to close this help."#
     }
 }

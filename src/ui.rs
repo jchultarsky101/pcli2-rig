@@ -1,11 +1,11 @@
 //! UI rendering with ratatui
 
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
-    Frame,
 };
 use tui_markdown::from_str;
 
@@ -18,7 +18,7 @@ mod colors {
     pub const BACKGROUND: Color = Color::Rgb(15, 15, 20);
     pub const FOREGROUND: Color = Color::Rgb(220, 220, 220);
     pub const DIM: Color = Color::Rgb(100, 100, 100);
-    
+
     // Accent colors
     pub const ACCENT_CYAN: Color = Color::Rgb(0, 229, 255);
     pub const ACCENT_PURPLE: Color = Color::Rgb(123, 92, 255);
@@ -28,7 +28,7 @@ mod colors {
     pub const ERROR_RED: Color = Color::Rgb(255, 85, 85);
     pub const USER_BG: Color = Color::Rgb(30, 30, 40);
     pub const ASSISTANT_BG: Color = Color::Rgb(25, 25, 35);
-    
+
     // Cursor colors - bright orange for high visibility
     #[allow(dead_code)]
     pub const CURSOR_BG: Color = Color::Rgb(255, 140, 0);
@@ -55,6 +55,11 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     render_logs(frame, app, chunks[2], app.focus_pane() == 2);
     render_status(frame, app, chunks[3]);
 
+    // Render help modal if active
+    if app.show_help() {
+        render_help_modal(frame, app, area);
+    }
+
     // Render tool confirmation dialog if needed
     if app.has_pending_tool_call() {
         render_tool_confirmation(frame, app, area);
@@ -63,7 +68,11 @@ pub fn render(frame: &mut Frame, app: &mut App) {
 
 /// Render the chat history
 fn render_chat(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
-    let border_color = if is_focused { colors::ACCENT_GREEN } else { colors::DIM };
+    let border_color = if is_focused {
+        colors::ACCENT_GREEN
+    } else {
+        colors::DIM
+    };
     let history = app.agent().chat_history();
 
     // Build all lines with background colors
@@ -106,7 +115,7 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
 
         // Add prefix line
         all_lines.push((Line::from(Span::styled(prefix, style)), bg_color));
-        
+
         // Render content - use markdown for assistant messages
         if msg.role == crate::agent::MessageRole::Assistant {
             let markdown_text = from_str(&msg.content);
@@ -116,13 +125,16 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
         } else {
             let content = format_msg_content(&msg.content, 80);
             for line in content.lines() {
-                all_lines.push((Line::from(Span::styled(
-                    line.to_string(),
-                    Style::default().fg(colors::FOREGROUND),
-                )), bg_color));
+                all_lines.push((
+                    Line::from(Span::styled(
+                        line.to_string(),
+                        Style::default().fg(colors::FOREGROUND),
+                    )),
+                    bg_color,
+                ));
             }
         }
-        
+
         all_lines.push((Line::from(""), bg_color));
     }
 
@@ -136,10 +148,13 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
             3 => "⠸",
             _ => "⠋",
         };
-        all_lines.push((Line::from(Span::styled(
-            format!("  {} thinking...", spinner),
-            Style::default().fg(colors::ACCENT_YELLOW),
-        )), None));
+        all_lines.push((
+            Line::from(Span::styled(
+                format!("  {} thinking...", spinner),
+                Style::default().fg(colors::ACCENT_YELLOW),
+            )),
+            None,
+        ));
     }
 
     // Calculate visible height (subtract 2 for borders/title)
@@ -156,8 +171,11 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
     };
 
     // Get visible lines
-    let visible_lines: Vec<(Line, Option<ratatui::style::Color>)> =
-        all_lines.into_iter().skip(scroll_start).take(visible_height).collect();
+    let visible_lines: Vec<(Line, Option<ratatui::style::Color>)> = all_lines
+        .into_iter()
+        .skip(scroll_start)
+        .take(visible_height)
+        .collect();
 
     // Group consecutive lines with same background into ListItems
     let mut items: Vec<ListItem> = Vec::new();
@@ -166,8 +184,10 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
 
     for (line, bg) in visible_lines {
         if current_bg != bg && !current_item_lines.is_empty() {
-            items.push(ListItem::new(current_item_lines)
-                .style(Style::default().bg(current_bg.unwrap_or(colors::BACKGROUND))));
+            items.push(
+                ListItem::new(current_item_lines)
+                    .style(Style::default().bg(current_bg.unwrap_or(colors::BACKGROUND))),
+            );
             current_item_lines = Vec::new();
         }
         current_bg = bg;
@@ -175,8 +195,10 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
     }
 
     if !current_item_lines.is_empty() {
-        items.push(ListItem::new(current_item_lines)
-            .style(Style::default().bg(current_bg.unwrap_or(colors::BACKGROUND))));
+        items.push(
+            ListItem::new(current_item_lines)
+                .style(Style::default().bg(current_bg.unwrap_or(colors::BACKGROUND))),
+        );
     }
 
     let mut block = Block::default()
@@ -201,8 +223,12 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
 
 /// Render the input area with visible blinking cursor
 fn render_input(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
-    let border_color = if is_focused { colors::ACCENT_CYAN } else { colors::DIM };
-    
+    let border_color = if is_focused {
+        colors::ACCENT_CYAN
+    } else {
+        colors::DIM
+    };
+
     let input_text = if app.input().is_empty() {
         // Show placeholder with blinking block cursor at the start
         vec![Line::from(vec![
@@ -213,10 +239,7 @@ fn render_input(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
                     .bg(colors::ACCENT_ORANGE)
                     .add_modifier(Modifier::RAPID_BLINK),
             ),
-            Span::styled(
-                " Type your message...",
-                Style::default().fg(colors::DIM),
-            ),
+            Span::styled(" Type your message...", Style::default().fg(colors::DIM)),
         ])]
     } else {
         // Show actual input with visible blinking block cursor
@@ -241,30 +264,33 @@ fn render_input(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
         ])]
     };
 
-    let input = Paragraph::new(input_text)
-        .block(
-            Block::default()
-                .title({
-                    let model = app.agent().model_name();
-                    let mcp_count = app.agent().mcp_server_count();
-                    if mcp_count > 0 {
-                        format!(" Input │ {} │ 🔌{} ", model, mcp_count)
-                    } else {
-                        format!(" Input │ {} ", model)
-                    }
-                })
-                .title_style(Style::default().fg(border_color))
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(border_color))
-                .style(Style::default().bg(colors::BACKGROUND)),
-        );
+    let input = Paragraph::new(input_text).block(
+        Block::default()
+            .title({
+                let model = app.agent().model_name();
+                let mcp_count = app.agent().mcp_server_count();
+                if mcp_count > 0 {
+                    format!(" Input │ {} │ 🔌{} ", model, mcp_count)
+                } else {
+                    format!(" Input │ {} ", model)
+                }
+            })
+            .title_style(Style::default().fg(border_color))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(border_color))
+            .style(Style::default().bg(colors::BACKGROUND)),
+    );
 
     frame.render_widget(input, area);
 }
 
 /// Render the log panel
 fn render_logs(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
-    let border_color = if is_focused { colors::ACCENT_PURPLE } else { colors::DIM };
+    let border_color = if is_focused {
+        colors::ACCENT_PURPLE
+    } else {
+        colors::DIM
+    };
     let logs = app.logs();
 
     // Calculate visible lines (subtract 2 for borders/title)
@@ -284,13 +310,19 @@ fn render_logs(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
         .take(visible_lines)
         .map(|line| {
             // Add emoji based on log content
-            let (emoji, color) = if line.contains("ERROR") || line.contains("Error") || line.contains("failed") {
+            let (emoji, color) = if line.contains("ERROR")
+                || line.contains("Error")
+                || line.contains("failed")
+            {
                 ("✗ ", colors::ERROR_RED)
             } else if line.contains("WARN") || line.contains("Empty") {
                 ("⚠ ", colors::ACCENT_YELLOW)
             } else if line.contains("INFO") || line.contains("Ready") || line.contains("success") {
                 ("✓ ", colors::ACCENT_GREEN)
-            } else if line.contains("DEBUG") || line.contains("Sending") || line.contains("Received") {
+            } else if line.contains("DEBUG")
+                || line.contains("Sending")
+                || line.contains("Received")
+            {
                 ("⋯ ", colors::ACCENT_CYAN)
             } else {
                 ("• ", colors::DIM)
@@ -335,14 +367,9 @@ fn render_status(frame: &mut Frame, app: &App, area: Rect) {
             3 => "⠸",
             _ => "⠋",
         };
-        format!(" {} {}",
-            spinner,
-            app.status()
-        )
+        format!(" {} {}", spinner, app.status())
     } else {
-        format!(" {} ",
-            app.status()
-        )
+        format!(" {} ", app.status())
     };
 
     let status_style = if app.status().contains("Error") {
@@ -355,10 +382,7 @@ fn render_status(frame: &mut Frame, app: &App, area: Rect) {
         Style::default().fg(colors::DIM)
     };
 
-    let status = Paragraph::new(Line::from(Span::styled(
-        status_text,
-        status_style,
-    )));
+    let status = Paragraph::new(Line::from(Span::styled(status_text, status_style)));
 
     frame.render_widget(status, area);
 }
@@ -398,18 +422,149 @@ fn render_tool_confirmation(frame: &mut Frame, app: &App, area: Rect) {
             Line::from(""),
         ];
 
-        let dialog = Paragraph::new(lines)
-            .block(
-                Block::default()
-                    .title(" Confirmation Required ")
-                    .title_style(Style::default().fg(colors::ACCENT_YELLOW))
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(colors::ACCENT_YELLOW))
-                    .style(Style::default().bg(colors::BACKGROUND)),
-            );
+        let dialog = Paragraph::new(lines).block(
+            Block::default()
+                .title(" Confirmation Required ")
+                .title_style(Style::default().fg(colors::ACCENT_YELLOW))
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(colors::ACCENT_YELLOW))
+                .style(Style::default().bg(colors::BACKGROUND)),
+        );
 
         frame.render_widget(dialog, dialog_area);
     }
+}
+
+/// Render help modal dialog with scrollable text
+fn render_help_modal(frame: &mut Frame, app: &App, area: Rect) {
+    // Create centered dialog (80% width, 90% height)
+    let dialog_width = (area.width * 80) / 100;
+    let dialog_height = (area.height * 90) / 100;
+    let dialog_area = Rect::new(
+        (area.width - dialog_width) / 2,
+        (area.height - dialog_height) / 2,
+        dialog_width,
+        dialog_height,
+    );
+
+    // Clear the area behind the dialog
+    frame.render_widget(ratatui::widgets::Clear, dialog_area);
+
+    let help_text = App::get_help_text();
+    let scroll_offset = app.help_scroll_offset();
+
+    // Parse help text into lines
+    let all_lines: Vec<&str> = help_text.lines().collect();
+    let total_lines = all_lines.len();
+
+    // Calculate visible range
+    let visible_lines = dialog_height.saturating_sub(4) as usize; // Subtract borders and title
+    let start = scroll_offset.min(total_lines.saturating_sub(visible_lines));
+    let end = (start + visible_lines).min(total_lines);
+
+    // Build visible lines with styling
+    let mut styled_lines: Vec<Line> = Vec::new();
+
+    for (i, line) in all_lines.iter().skip(start).take(end - start).enumerate() {
+        let _line_num = start + i;
+
+        // Style based on line content
+        if line.starts_with("PCLI2-RIG") || line.starts_with("═══") {
+            styled_lines.push(Line::from(Span::styled(
+                line.to_string(),
+                Style::default()
+                    .fg(colors::ACCENT_CYAN)
+                    .add_modifier(Modifier::BOLD),
+            )));
+        } else if line.ends_with("────────") || line.is_empty() {
+            styled_lines.push(Line::from(Span::styled(
+                line.to_string(),
+                Style::default().fg(colors::DIM),
+            )));
+        } else if line.contains("MOUSE")
+            || line.contains("KEYBOARD")
+            || line.contains("PANES")
+            || line.contains("CONFIGURATION")
+            || line.contains("LOGS")
+            || line.contains("COMMANDS")
+        {
+            styled_lines.push(Line::from(Span::styled(
+                line.to_string(),
+                Style::default()
+                    .fg(colors::ACCENT_YELLOW)
+                    .add_modifier(Modifier::BOLD),
+            )));
+        } else if line.trim().starts_with('/')
+            || line.trim().starts_with("Ctrl+")
+            || line.trim().starts_with("Tab")
+            || line.trim().starts_with("Shift+")
+            || line.trim().starts_with("Enter")
+            || line.trim().starts_with("Esc")
+            || line.trim().starts_with("↑")
+            || line.trim().starts_with("↓")
+            || line.trim().starts_with("PageUp")
+            || line.trim().starts_with("PageDown")
+            || line.trim().starts_with("Left")
+            || line.trim().starts_with("Scroll")
+            || line.trim().starts_with("Backspace")
+            || line.trim().starts_with("Delete")
+            || line.trim().starts_with("Home")
+            || line.trim().starts_with("End")
+            || line.trim().starts_with("Y/")
+            || line.trim().starts_with("N/")
+        {
+            styled_lines.push(Line::from(Span::styled(
+                line.to_string(),
+                Style::default().fg(colors::ACCENT_GREEN),
+            )));
+        } else if line.contains("Chat History")
+            || line.contains("Input")
+            || line.contains("Logs")
+            || line.contains("Status")
+        {
+            styled_lines.push(Line::from(Span::styled(
+                line.to_string(),
+                Style::default().fg(colors::ACCENT_PURPLE),
+            )));
+        } else if line.contains("Press") {
+            styled_lines.push(Line::from(Span::styled(
+                line.to_string(),
+                Style::default()
+                    .fg(colors::ACCENT_YELLOW)
+                    .add_modifier(Modifier::ITALIC),
+            )));
+        } else {
+            styled_lines.push(Line::from(Span::styled(
+                line.to_string(),
+                Style::default().fg(colors::FOREGROUND),
+            )));
+        }
+    }
+
+    // Add scroll indicator
+    let scroll_info = if total_lines > visible_lines {
+        format!(" [{}-{}/{}] ↑↓ scroll ", start + 1, end, total_lines)
+    } else {
+        String::new()
+    };
+
+    let dialog = Paragraph::new(styled_lines)
+        .block(
+            Block::default()
+                .title(" Help ")
+                .title_style(
+                    Style::default()
+                        .fg(colors::ACCENT_CYAN)
+                        .add_modifier(Modifier::BOLD),
+                )
+                .title_bottom(Span::styled(scroll_info, Style::default().fg(colors::DIM)))
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(colors::ACCENT_CYAN))
+                .style(Style::default().bg(colors::BACKGROUND)),
+        )
+        .wrap(ratatui::widgets::Wrap { trim: false });
+
+    frame.render_widget(dialog, dialog_area);
 }
 
 /// Format message content for display
@@ -417,7 +572,7 @@ fn format_msg_content(content: &str, max_width: usize) -> String {
     // Simple word wrapping
     let mut result = String::new();
     let mut current_line = String::new();
-    
+
     for word in content.split_whitespace() {
         if current_line.len() + word.len() + 1 > max_width {
             result.push_str(&current_line);
@@ -429,10 +584,10 @@ fn format_msg_content(content: &str, max_width: usize) -> String {
         }
         current_line.push_str(word);
     }
-    
+
     if !current_line.is_empty() {
         result.push_str(&current_line);
     }
-    
+
     result
 }

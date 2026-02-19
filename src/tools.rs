@@ -1,5 +1,5 @@
 //! Built-in tools for the AI agent
-//! 
+//!
 //! Note: Tool argument structs are defined here for future expansion.
 //! Currently tools are executed directly in the agent module.
 

@@ -4,9 +4,9 @@ use anyhow::{Context, Result};
 use crossterm::{
     event::{self, Event},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io;
 use tokio::sync::mpsc;
 use tracing::{debug, info};
@@ -29,10 +29,10 @@ impl Tui {
         // Spawn event reader thread
         std::thread::spawn(move || {
             loop {
-                if let Ok(event) = event::read() {
-                    if event_tx.send(Ok(event)).is_err() {
-                        break;
-                    }
+                if let Ok(event) = event::read()
+                    && event_tx.send(Ok(event)).is_err()
+                {
+                    break;
                 }
             }
         });
@@ -49,8 +49,7 @@ impl Tui {
         info!("Entering TUI mode");
 
         enable_raw_mode().context("Failed to enable raw mode")?;
-        execute!(io::stdout(), EnterAlternateScreen)
-            .context("Failed to enter alternate screen")?;
+        execute!(io::stdout(), EnterAlternateScreen).context("Failed to enter alternate screen")?;
 
         // Hide cursor and enable mouse capture
         execute!(io::stdout(), crossterm::cursor::Hide)?;
@@ -68,8 +67,7 @@ impl Tui {
         execute!(io::stdout(), crossterm::event::DisableMouseCapture)?;
 
         disable_raw_mode().context("Failed to disable raw mode")?;
-        execute!(io::stdout(), LeaveAlternateScreen)
-            .context("Failed to leave alternate screen")?;
+        execute!(io::stdout(), LeaveAlternateScreen).context("Failed to leave alternate screen")?;
 
         Ok(())
     }
