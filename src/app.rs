@@ -587,9 +587,22 @@ Type /help for available commands · Type /quit to exit
             AppMessage::Response(Err(e)) => {
                 self.is_thinking = false;
                 self.cancel_token = None;
-                self.status = format!("✗ Error: {}", e);
+                
+                // Clean up repetitive error messages
+                let error_msg = e.to_string();
+                let clean_error = if error_msg.contains("Tool call error:") {
+                    // Extract just the essential error
+                    error_msg.split("Tool call error:").last().unwrap_or(&error_msg).trim().to_string()
+                } else if error_msg.contains("ToolCallError:") {
+                    // Remove repetitive ToolCallError prefixes
+                    error_msg.split("ToolCallError:").last().unwrap_or(&error_msg).trim().to_string()
+                } else {
+                    error_msg
+                };
+                
+                self.status = format!("✗ Error: {}", clean_error);
                 self.agent
-                    .add_assistant_message(format!("⚠ **Error:** {}", e));
+                    .add_assistant_message(format!("⚠ **Error:** {}", clean_error));
                 tracing::error!("Received error: {}", e);
             }
         }
@@ -801,8 +814,18 @@ Type /help for available commands · Type /quit to exit
                     }
                 }
                 Err(e) => {
-                    self.status = format!("Tool execution failed: {}", e);
-                    self.agent.add_tool_result(format!("Error: {}", e));
+                    // Clean up repetitive error messages
+                    let error_msg = e.to_string();
+                    let clean_error = if error_msg.contains("Tool call error:") {
+                        error_msg.split("Tool call error:").last().unwrap_or(&error_msg).trim().to_string()
+                    } else if error_msg.contains("ToolCallError:") {
+                        error_msg.split("ToolCallError:").last().unwrap_or(&error_msg).trim().to_string()
+                    } else {
+                        error_msg
+                    };
+                    
+                    self.status = format!("Tool execution failed: {}", clean_error);
+                    self.agent.add_tool_result(format!("Error: {}", clean_error));
                 }
             }
         }
