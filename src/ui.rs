@@ -12,27 +12,29 @@ use ansi_to_tui::IntoText;
 
 use crate::app::App;
 
-/// Colors for the dark theme
+/// Colors for the dark theme (warm color palette)
 mod colors {
     use ratatui::style::Color;
 
-    pub const BACKGROUND: Color = Color::Rgb(15, 15, 20);
-    pub const FOREGROUND: Color = Color::Rgb(220, 220, 220);
-    pub const DIM: Color = Color::Rgb(100, 100, 100);
+    pub const BACKGROUND: Color = Color::Rgb(0, 0, 0);
+    pub const FOREGROUND: Color = Color::Rgb(230, 220, 200);
+    pub const DIM: Color = Color::Rgb(120, 110, 100);
 
-    // Accent colors
-    pub const ACCENT_CYAN: Color = Color::Rgb(0, 229, 255);
-    pub const ACCENT_PURPLE: Color = Color::Rgb(123, 92, 255);
-    pub const ACCENT_GREEN: Color = Color::Rgb(80, 250, 123);
-    pub const ACCENT_YELLOW: Color = Color::Rgb(245, 158, 11);
-    pub const ACCENT_ORANGE: Color = Color::Rgb(255, 140, 0);
-    pub const ERROR_RED: Color = Color::Rgb(255, 85, 85);
-    pub const USER_BG: Color = Color::Rgb(30, 30, 40);
-    pub const ASSISTANT_BG: Color = Color::Rgb(25, 25, 35);
+    // Accent colors (warm palette)
+    pub const ACCENT_CYAN: Color = Color::Rgb(100, 200, 210);
+    pub const ACCENT_PURPLE: Color = Color::Rgb(180, 130, 200);
+    pub const ACCENT_GREEN: Color = Color::Rgb(120, 200, 120);
+    pub const ACCENT_YELLOW: Color = Color::Rgb(255, 180, 60);
+    pub const ACCENT_ORANGE: Color = Color::Rgb(255, 150, 50);
+    pub const ACCENT_WARM_ORANGE: Color = Color::Rgb(255, 130, 60);
+    pub const ACCENT_DARK_WARM_RED: Color = Color::Rgb(200, 80, 60);
+    pub const ERROR_RED: Color = Color::Rgb(255, 100, 100);
+    pub const USER_BG: Color = Color::Rgb(18, 18, 18);
+    pub const ASSISTANT_BG: Color = Color::Rgb(12, 12, 12);
 
-    // Cursor colors - bright orange for high visibility
+    // Cursor colors - warm orange for high visibility
     #[allow(dead_code)]
-    pub const CURSOR_BG: Color = Color::Rgb(255, 140, 0);
+    pub const CURSOR_BG: Color = Color::Rgb(255, 150, 50);
     pub const CURSOR_FG: Color = Color::Rgb(0, 0, 0);
 }
 
@@ -77,12 +79,17 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
     let history = app.agent().chat_history();
 
     // ASCII art banner (62 chars wide, 6 lines tall)
-    const ASCII_BANNER: &str = r#"  _____   _____ _      _____ ___    _____  _____ _____ 
- |  __ \ / ____| |    |_   _|__ \  |  __ \|_   _/ ____|
- | |__) | |    | |      | |    ) | | |__) | | || |  __ 
- |  ___/| |    | |      | |   / /  |  _  /  | || | |_ |
- | |    | |____| |____ _| |_ / /_  | | \ \ _| || |__| |
- |_|     \_____|______|_____|____| |_|  \_\_____\_____|"#;
+    const ASCII_BANNER: &str = r#"
+██████╗  ██████╗██╗     ██╗██████╗     ██████╗ ██╗ ██████╗
+██╔══██╗██╔════╝██║     ██║╚════██╗    ██╔══██╗██║██╔════╝
+██████╔╝██║     ██║     ██║ █████╔╝    ██████╔╝██║██║  ███╗
+██╔═══╝ ██║     ██║     ██║██╔═══╝     ██╔══██╗██║██║   ██║
+██║     ╚██████╗███████╗██║███████╗    ██║  ██║██║╚██████╔╝
+╚═╝      ╚═════╝╚══════╝╚═╝╚══════╝    ╚═╝  ╚═╝╚═╝ ╚═════╝"#;
+
+    // Gradient colors for ASCII banner (left to right: warm orange → golden yellow)
+    // Start: RGB(255, 130, 60) - warm orange
+    // End:   RGB(255, 200, 80) - golden yellow
 
     // Build all lines with background colors
     let mut all_lines: Vec<(Line, Option<ratatui::style::Color>)> = Vec::new();
@@ -91,15 +98,38 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
     // Add ASCII banner if terminal is wide enough (64+ chars) and tall enough (10+ lines)
     if area.width >= 64 && area.height >= 10 {
         for line in ASCII_BANNER.lines() {
-            all_lines.push((
-                Line::from(Span::styled(
-                    line.to_string(),
+            if line.is_empty() {
+                all_lines.push((Line::from(""), None));
+                continue;
+            }
+
+            // Create smooth gradient effect by coloring each character
+            let chars: Vec<char> = line.chars().collect();
+            let max_len = chars.len().saturating_sub(1);
+            let mut spans: Vec<Span> = Vec::new();
+
+            for (i, &ch) in chars.iter().enumerate() {
+                // Calculate interpolation factor (0.0 to 1.0)
+                let t = if max_len == 0 {
+                    0.0
+                } else {
+                    i as f32 / max_len as f32
+                };
+
+                // Interpolate RGB values from warm orange to golden yellow
+                let r = (255.0 + (255.0 - 255.0) * t) as u8;
+                let g = (130.0 + (200.0 - 130.0) * t) as u8;
+                let b = (60.0 + (80.0 - 60.0) * t) as u8;
+
+                spans.push(Span::styled(
+                    ch.to_string(),
                     Style::default()
-                        .fg(colors::ACCENT_CYAN)
+                        .fg(ratatui::style::Color::Rgb(r, g, b))
                         .add_modifier(Modifier::BOLD),
-                )),
-                None,
-            ));
+                ));
+            }
+
+            all_lines.push((Line::from(spans), None));
         }
         all_lines.push((Line::from(""), None)); // Spacing after banner
     }
@@ -116,13 +146,13 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
             crate::agent::MessageRole::User => (
                 "👤 You:",
                 Style::default()
-                    .fg(colors::ACCENT_GREEN)
+                    .fg(colors::ACCENT_WARM_ORANGE)
                     .add_modifier(Modifier::BOLD),
             ),
             crate::agent::MessageRole::Assistant => (
                 "🤖 Assistant:",
                 Style::default()
-                    .fg(colors::ACCENT_CYAN)
+                    .fg(colors::ACCENT_WARM_ORANGE)
                     .add_modifier(Modifier::BOLD),
             ),
             crate::agent::MessageRole::System => (
@@ -165,25 +195,6 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
         if idx < total_messages - 1 {
             all_lines.push((Line::from(""), bg_color));
         }
-    }
-
-    // Add thinking indicator
-    if app.is_thinking() {
-        let elapsed = app.thinking_start().elapsed().as_secs();
-        let spinner = match elapsed % 4 {
-            0 => "⠋",
-            1 => "⠙",
-            2 => "⠹",
-            3 => "⠸",
-            _ => "⠋",
-        };
-        all_lines.push((
-            Line::from(Span::styled(
-                format!("  {} thinking...", spinner),
-                Style::default().fg(colors::ACCENT_YELLOW),
-            )),
-            None,
-        ));
     }
 
     // Calculate visible height (subtract 2 for borders/title)
@@ -253,7 +264,7 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
 /// Render the input area with visible blinking cursor
 fn render_input(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
     let border_color = if is_focused {
-        colors::ACCENT_CYAN
+        colors::ACCENT_DARK_WARM_RED
     } else {
         colors::DIM
     };
