@@ -176,7 +176,9 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
                 all_lines.push((line, bg_color));
             }
         } else {
-            let content = format_msg_content(&msg.content, 80);
+            // Calculate dynamic max width based on terminal width (subtract prefix and padding)
+            let max_width = area.width.saturating_sub(20) as usize;
+            let content = format_msg_content(&msg.content, max_width.max(40));
             for line in content.lines() {
                 all_lines.push((
                     Line::from(Span::styled(
