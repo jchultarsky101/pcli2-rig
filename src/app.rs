@@ -631,12 +631,11 @@ Type /help for available commands · Type /quit to exit
                                     "No MCP tools available.".to_string(),
                                 );
                             } else {
-                                let mut msg = String::from("Available MCP tools:\n");
-                                for tool in tool_defs {
-                                    msg.push_str(&format!(
-                                        "  • {}\n    {}\n",
-                                        tool.name, tool.description
-                                    ));
+                                let mut msg = String::new();
+                                msg.push_str(&format!("**Available MCP tools** ({} total):\n\n", tool_defs.len()));
+                                for (i, tool) in tool_defs.iter().enumerate() {
+                                    msg.push_str(&format!("**{}.** `{}`\n", i + 1, tool.name));
+                                    msg.push_str(&format!("    {}\n\n", tool.description));
                                 }
                                 self.agent.add_assistant_message(msg);
                             }
