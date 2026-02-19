@@ -211,14 +211,6 @@ pub struct ToolCallRequest {
     pub call_id: String,
 }
 
-/// MCP Tool information
-#[derive(Debug, Clone)]
-pub struct McpTool {
-    pub name: String,
-    pub description: String,
-    pub server: String,
-}
-
 /// The AI agent
 pub struct Agent {
     client: ollama::Client,
@@ -404,18 +396,6 @@ You are running on the user's local machine via Ollama."#
     /// Get connected MCP servers
     pub fn mcp_connected(&self) -> &[String] {
         &self.mcp_connected
-    }
-
-    /// Get available MCP tools (placeholder - tools are managed by ToolServer)
-    #[allow(dead_code)]
-    pub fn mcp_tools(&self) -> Vec<McpTool> {
-        // Tools are now managed dynamically by the ToolServer
-        // This returns placeholder info based on connected servers
-        self.mcp_connected.iter().map(|server| McpTool {
-            name: format!("{}_tools", server),
-            description: format!("Tools from MCP server '{}'", server),
-            server: server.clone(),
-        }).collect()
     }
 
     /// Get count of connected MCP servers
