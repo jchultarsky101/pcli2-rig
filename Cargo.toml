@@ -25,7 +25,8 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # AI Framework
-rig-core = "0.31"
+rig-core = { version = "0.31", features = ["rmcp"] }
+rmcp = "0.1"
 
 # TUI
 ratatui = "0.30"

@@ -93,6 +93,7 @@ async fn main() -> Result<()> {
         model: args.model.clone(),
         host: args.host.clone(),
         yolo: args.yolo,
+        mcp_servers: Vec::new(),
     };
 
     // Create the application

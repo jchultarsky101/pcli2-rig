@@ -8,7 +8,7 @@ use rig::{
 };
 use tracing::{debug, info};
 
-use crate::config::Config;
+use crate::config::{Config, McpServerConfig};
 
 /// Represents a chat message in the conversation
 #[derive(Debug, Clone)]
@@ -35,19 +35,31 @@ pub struct ToolCallRequest {
     pub call_id: String,
 }
 
+/// MCP Tool information
+#[derive(Debug, Clone)]
+pub struct McpTool {
+    pub name: String,
+    pub description: String,
+    pub server: String,
+}
+
 /// The AI agent
 pub struct Agent {
     client: ollama::Client,
     model_name: String,
     preamble: String,
     chat_history: Vec<ChatMessage>,
+    /// Connected MCP servers and their tools
+    mcp_tools: Vec<McpTool>,
+    /// MCP server connection status
+    mcp_connected: Vec<String>,
 }
 
 impl Agent {
     /// Create a new agent
     pub fn new(config: &Config) -> Result<Self> {
         info!("Creating Ollama client with host: {}", config.host);
-        
+
         // Create Ollama client
         let client = ollama::Client::new(Nothing)
             .map_err(|e| anyhow::anyhow!("Failed to create Ollama client: {}", e))?;
@@ -57,7 +69,70 @@ impl Agent {
             model_name: config.model.clone(),
             preamble: Self::default_preamble(),
             chat_history: Vec::new(),
+            mcp_tools: Vec::new(),
+            mcp_connected: Vec::new(),
         })
+    }
+
+    /// Connect to MCP servers and discover tools
+    pub async fn connect_mcp_servers(&mut self, servers: &[McpServerConfig]) {
+        info!("Connecting to {} MCP servers", servers.len());
+
+        for server in servers {
+            if !server.enabled {
+                continue;
+            }
+
+            info!("Connecting to MCP server: {} at {}", server.name, server.url);
+
+            // Try to connect to the MCP server
+            match self.connect_mcp_server(&server.url, &server.name).await {
+                Ok(tools) => {
+                    info!("Connected to MCP server '{}': {} tools available", server.name, tools.len());
+                    self.mcp_tools.extend(tools);
+                    self.mcp_connected.push(server.name.clone());
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to connect to MCP server '{}': {}", server.name, e);
+                }
+            }
+        }
+
+        // Update preamble to mention MCP tools if connected
+        if !self.mcp_tools.is_empty() {
+            let tool_names: Vec<&str> = self.mcp_tools.iter().map(|t| t.name.as_str()).collect();
+            let tools_str = tool_names.join(", ");
+            self.preamble = format!(
+                r#"You are PCLI2-RIG, a helpful AI coding assistant running in a terminal TUI.
+
+You have access to the following MCP tools: {}
+
+When using tools:
+1. Think carefully about what the user is asking
+2. Use the appropriate tool(s) to help
+3. Explain what you're doing and what the results mean
+
+Be concise but helpful. Use formatting like code blocks when appropriate.
+You are running on the user's local machine via Ollama."#,
+                tools_str
+            );
+        }
+    }
+
+    /// Connect to a single MCP server and fetch its tools
+    async fn connect_mcp_server(&self, _url: &str, name: &str) -> Result<Vec<McpTool>> {
+        // For now, we'll create placeholder tools based on server config
+        // In a full implementation, this would use the rmcp client to discover actual tools
+        let mut tools = Vec::new();
+
+        // Placeholder: create a generic tool for each server
+        tools.push(McpTool {
+            name: format!("{}_tool", name.replace("-", "_")),
+            description: format!("Tool provided by MCP server '{}'", name),
+            server: name.to_string(),
+        });
+
+        Ok(tools)
     }
 
     /// Default system preamble
@@ -116,6 +191,21 @@ You are running on the user's local machine via Ollama."#.to_string()
     /// Get the model name
     pub fn model_name(&self) -> &str {
         &self.model_name
+    }
+
+    /// Get connected MCP servers
+    pub fn mcp_connected(&self) -> &[String] {
+        &self.mcp_connected
+    }
+
+    /// Get available MCP tools
+    pub fn mcp_tools(&self) -> &[McpTool] {
+        &self.mcp_tools
+    }
+
+    /// Get count of connected MCP servers
+    pub fn mcp_server_count(&self) -> usize {
+        self.mcp_connected.len()
     }
 
     /// Send a message and get a response (without adding user message to history)

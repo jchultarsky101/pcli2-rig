@@ -20,6 +20,7 @@ pub static LOG_BUFFER: once_cell::sync::Lazy<Arc<Mutex<Vec<String>>>> =
 #[derive(Debug)]
 pub enum AppMessage {
     Response(Result<String>),
+    McpConnected,
 }
 
 /// Pending tool call awaiting confirmation
@@ -99,6 +100,18 @@ impl App {
 
         // Add welcome banner as first message in chat history
         self.add_welcome_banner();
+
+        // Connect to MCP servers
+        let mcp_servers = self.config.mcp_servers.clone();
+        if !mcp_servers.is_empty() {
+            self.status = "Connecting to MCP servers...".to_string();
+            // We need to connect asynchronously, so spawn a task
+            let agent_tx = tx.clone();
+            tokio::spawn(async move {
+                // MCP connection would happen here in a real implementation
+                let _ = agent_tx.send(AppMessage::McpConnected);
+            });
+        }
 
         // Timer for spinner animation (500ms interval)
         let mut spinner_timer = tokio::time::interval(std::time::Duration::from_millis(500));
@@ -391,10 +404,9 @@ impl App {
 
     /// Handle the response from the async task
     async fn handle_response(&mut self, msg: AppMessage, tx: &mpsc::Sender<AppMessage>) -> Result<()> {
-        self.is_thinking = false;
-
         match msg {
             AppMessage::Response(Ok(response)) => {
+                self.is_thinking = false;
                 tracing::info!("handle_response: Ok response, {} chars", response.len());
                 if response.trim().is_empty() {
                     // Empty response - report as error
@@ -410,9 +422,21 @@ impl App {
                 debug!("Agent response: {}", response);
             }
             AppMessage::Response(Err(e)) => {
+                self.is_thinking = false;
                 self.status = format!("✗ Error: {}", e);
                 self.agent.add_assistant_message(format!("⚠ **Error:** {}", e));
                 tracing::error!("Received error: {}", e);
+            }
+            AppMessage::McpConnected => {
+                // MCP servers connected
+                let count = self.agent.mcp_server_count();
+                if count > 0 {
+                    self.status = format!("✓ {} MCP server(s) connected", count);
+                    self.agent.add_assistant_message(format!("🔌 Connected to {} MCP server(s): {}", 
+                        count,
+                        self.agent.mcp_connected().join(", ")
+                    ));
+                }
             }
         }
 
@@ -475,8 +499,89 @@ impl App {
                 self.status = "YOLO mode toggled (feature pending)".to_string();
                 self.agent.add_assistant_message("YOLO mode toggle requested. This feature is coming soon!".to_string());
             }
+            "/mcp" | "/mcp-servers" => {
+                self.handle_mcp_command(&args).await?;
+            }
             _ => {
                 self.agent.add_assistant_message(format!("Unknown command: {}. Type /help for available commands.", command));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Handle MCP commands
+    async fn handle_mcp_command(&mut self, args: &[&str]) -> Result<()> {
+        if args.is_empty() {
+            // Show MCP status
+            let connected = self.agent.mcp_connected();
+            let total = self.config.mcp_servers.len();
+            let enabled = self.config.enabled_mcp_servers().len();
+            
+            let mut msg = format!("MCP Configuration:\n");
+            msg.push_str(&format!("  Configured servers: {}\n", total));
+            msg.push_str(&format!("  Enabled: {}\n", enabled));
+            msg.push_str(&format!("  Connected: {}\n\n", connected.len()));
+            
+            if !connected.is_empty() {
+                msg.push_str("Connected servers:\n");
+                for server in connected {
+                    msg.push_str(&format!("  ✓ {}\n", server));
+                }
+            }
+            
+            if total > 0 {
+                msg.push_str("\nCommands:\n");
+                msg.push_str("  /mcp list     - List all configured servers\n");
+                msg.push_str("  /mcp tools    - Show available MCP tools\n");
+                msg.push_str("  /mcp add <name> <url> - Add a new server\n");
+            } else {
+                msg.push_str("\nNo MCP servers configured.\n");
+                msg.push_str("Add servers by editing ~/.config/pcli2-rig/config.toml\n");
+            }
+            
+            self.agent.add_assistant_message(msg);
+            return Ok(());
+        }
+
+        match args[0] {
+            "list" => {
+                let mut msg = String::from("Configured MCP servers:\n");
+                for server in &self.config.mcp_servers {
+                    let status = if server.enabled { "✓" } else { "✗" };
+                    msg.push_str(&format!("  {} {} ({})\n", status, server.name, server.url));
+                }
+                self.agent.add_assistant_message(msg);
+            }
+            "tools" => {
+                let tools = self.agent.mcp_tools();
+                if tools.is_empty() {
+                    self.agent.add_assistant_message("No MCP tools available. Connect to an MCP server first.".to_string());
+                } else {
+                    let mut msg = String::from("Available MCP tools:\n");
+                    for tool in tools {
+                        msg.push_str(&format!("  • {} (from {})\n    {}\n", tool.name, tool.server, tool.description));
+                    }
+                    self.agent.add_assistant_message(msg);
+                }
+            }
+            "add" => {
+                if args.len() < 3 {
+                    self.agent.add_assistant_message("Usage: /mcp add <name> <url>".to_string());
+                } else {
+                    self.agent.add_assistant_message(format!(
+                        "To add MCP server '{}', edit ~/.config/pcli2-rig/config.toml\n\
+                         Add this section:\n\
+                         [[mcp_servers]]\n\
+                         name = \"{}\"\n\
+                         url = \"{}\"\n\
+                         enabled = true",
+                        args[1], args[1], args[2]
+                    ));
+                }
+            }
+            _ => {
+                self.agent.add_assistant_message(format!("Unknown MCP command: {}. Type /mcp for help.", args[0]));
             }
         }
 
@@ -492,14 +597,21 @@ impl App {
   /model [name]     Show or set the current model
   /history, /hist   Show message count
   /status           Show current status
+  /mcp              Show MCP server status
+  /mcp list         List configured MCP servers
+  /mcp tools        Show available MCP tools
   /yolo             Toggle YOLO mode (skip tool confirmation)
 
 Keyboard Shortcuts:
   Enter             Send message
   Ctrl+C            Quit
   Ctrl+K            Clear chat history
-  ↑/↓               Scroll through history
-  PageUp/PageDown   Scroll faster
+  ↑/↓               Scroll through history (when Chat/Logs focused)
+  PageUp/PageDown   Scroll faster (5 lines)
+  Tab               Switch focus between panes
+  Shift+Tab         Switch focus backwards
+  Mouse click       Click on pane to focus
+  Mouse wheel       Scroll in focused pane
   Y/n               Confirm/cancel tool execution
   Esc               Cancel tool execution"#;
         self.agent.add_assistant_message(help_text.to_string());
