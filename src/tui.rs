@@ -51,9 +51,8 @@ impl Tui {
         enable_raw_mode().context("Failed to enable raw mode")?;
         execute!(io::stdout(), EnterAlternateScreen).context("Failed to enter alternate screen")?;
 
-        // Hide cursor and enable mouse capture
+        // Hide cursor - mouse capture disabled by default to allow text selection
         execute!(io::stdout(), crossterm::cursor::Hide)?;
-        execute!(io::stdout(), crossterm::event::EnableMouseCapture)?;
 
         Ok(())
     }
@@ -62,13 +61,24 @@ impl Tui {
     pub fn exit(&mut self) -> Result<()> {
         info!("Exiting TUI mode");
 
-        // Show cursor and disable mouse capture
+        // Show cursor
         execute!(io::stdout(), crossterm::cursor::Show)?;
-        execute!(io::stdout(), crossterm::event::DisableMouseCapture)?;
 
         disable_raw_mode().context("Failed to disable raw mode")?;
         execute!(io::stdout(), LeaveAlternateScreen).context("Failed to leave alternate screen")?;
 
+        Ok(())
+    }
+
+    /// Enable mouse capture for clicking/scrolling
+    pub fn enable_mouse_capture(&self) -> Result<()> {
+        execute!(io::stdout(), crossterm::event::EnableMouseCapture)?;
+        Ok(())
+    }
+
+    /// Disable mouse capture to allow text selection
+    pub fn disable_mouse_capture(&self) -> Result<()> {
+        execute!(io::stdout(), crossterm::event::DisableMouseCapture)?;
         Ok(())
     }
 
@@ -82,8 +92,14 @@ impl Tui {
     }
 
     /// Get the terminal area
-    pub fn area(&mut self) -> ratatui::layout::Rect {
-        self.terminal.get_frame().area()
+    pub fn area(&self) -> ratatui::layout::Rect {
+        let size = self.terminal.size().unwrap_or_default();
+        ratatui::layout::Rect {
+            x: 0,
+            y: 0,
+            width: size.width,
+            height: size.height,
+        }
     }
 
     /// Get the next event

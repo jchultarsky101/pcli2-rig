@@ -11,7 +11,7 @@ use tracing::{debug, info};
 use crate::config::{Config, McpServerConfig};
 
 /// Represents a chat message in the conversation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ChatMessage {
     pub role: MessageRole,
     pub content: String,

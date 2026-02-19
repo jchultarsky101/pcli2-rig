@@ -75,10 +75,35 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
     };
     let history = app.agent().chat_history();
 
+    // ASCII art banner (62 chars wide, 6 lines tall)
+    const ASCII_BANNER: &str = r#"  _____   _____ _      _____ ___        _____            _____ 
+ |  __ \ / ____| |    |_   _|__ \      |  __ \     /\   / ____|
+ | |__) | |    | |      | |    ) |_____| |__) |   /  \ | |  __ 
+ |  ___/| |    | |      | |   / /______|  _  /   / /\ \| | |_ |
+ | |    | |____| |____ _| |_ / /_      | | \ \  / ____ \ |__| |
+ |_|     \_____|______|_____|____|     |_|  \_\/_/    \_\_____|"#;
+
     // Build all lines with background colors
     let mut all_lines: Vec<(Line, Option<ratatui::style::Color>)> = Vec::new();
+    let total_messages = history.len();
 
-    for msg in history {
+    // Add ASCII banner if terminal is wide enough (64+ chars) and tall enough (10+ lines)
+    if area.width >= 64 && area.height >= 10 {
+        for line in ASCII_BANNER.lines() {
+            all_lines.push((
+                Line::from(Span::styled(
+                    line.to_string(),
+                    Style::default()
+                        .fg(colors::ACCENT_CYAN)
+                        .add_modifier(Modifier::BOLD),
+                )),
+                None,
+            ));
+        }
+        all_lines.push((Line::from(""), None)); // Spacing after banner
+    }
+
+    for (idx, msg) in history.iter().enumerate() {
         let bg_color = match msg.role {
             crate::agent::MessageRole::User => Some(colors::USER_BG),
             crate::agent::MessageRole::Assistant => Some(colors::ASSISTANT_BG),
@@ -135,7 +160,10 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
             }
         }
 
-        all_lines.push((Line::from(""), bg_color));
+        // Add single spacing line between messages (not after the last one)
+        if idx < total_messages - 1 {
+            all_lines.push((Line::from(""), bg_color));
+        }
     }
 
     // Add thinking indicator

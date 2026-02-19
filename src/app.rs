@@ -1,7 +1,7 @@
 //! Main application state and logic
 
 use anyhow::Result;
-use crossterm::event::{Event, KeyEvent};
+use crossterm::event::{KeyEvent, KeyModifiers};
 use ratatui::Frame;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
@@ -69,6 +69,8 @@ pub struct App {
     show_help: bool,
     /// Scroll offset for help modal
     help_scroll_offset: usize,
+    /// Whether mouse capture is enabled (for click/scroll vs text selection)
+    mouse_enabled: bool,
 }
 
 impl App {
@@ -94,6 +96,7 @@ impl App {
             message_queue: Vec::new(),
             show_help: false,
             help_scroll_offset: 0,
+            mouse_enabled: false,
         }
     }
 
@@ -127,8 +130,7 @@ impl App {
 
         // Main event loop
         loop {
-            // Draw the UI and capture area
-            let area = tui.area();
+            // Draw the UI
             tui.draw(|frame| self.render(frame))?;
 
             // Handle events and messages
@@ -136,12 +138,7 @@ impl App {
                 // Handle UI events
                 event_result = tui.next_event() => {
                     if let Ok(Some(event)) = event_result {
-                        // Handle mouse events
-                        if let Event::Mouse(mouse_event) = &event {
-                            self.handle_mouse(*mouse_event, area);
-                        } else {
-                            self.handle_event(event, &tx).await?;
-                        }
+                        self.handle_event(event, &tx, tui).await?;
                     }
                 }
                 // Handle async responses and logs
@@ -173,13 +170,9 @@ impl App {
     /// Add the welcome banner to chat history
     fn add_welcome_banner(&mut self) {
         let banner = r#"
-  PCLI2-RIG
-  ════════════════════════════════
-  
-  🤖 Local AI Agent · Powered by Ollama
+🤖 PCLI2-RIG - Local AI Agent · Powered by Ollama
 
-  Type /help for available commands
-  Type /quit to exit
+Type /help for available commands · Type /quit to exit
 "#
         .to_string();
 
@@ -191,6 +184,7 @@ impl App {
         &mut self,
         event: crossterm::event::Event,
         tx: &mpsc::Sender<AppMessage>,
+        tui: &crate::tui::Tui,
     ) -> Result<()> {
         use crossterm::event::KeyCode;
 
@@ -216,7 +210,29 @@ impl App {
         }
 
         match event {
-            crossterm::event::Event::Key(key) => self.handle_key_event(key, tx).await?,
+            crossterm::event::Event::Key(key) => {
+                // Toggle mouse capture with Ctrl+M
+                if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('m') {
+                    if self.mouse_enabled {
+                        tui.disable_mouse_capture()?;
+                        self.mouse_enabled = false;
+                        self.status = "Mouse disabled (text selection enabled)".to_string();
+                    } else {
+                        tui.enable_mouse_capture()?;
+                        self.mouse_enabled = true;
+                        self.status = "Mouse enabled (click/scroll enabled)".to_string();
+                    }
+                    return Ok(());
+                }
+                self.handle_key_event(key, tx).await?;
+            }
+            crossterm::event::Event::Mouse(mouse) => {
+                // Only handle mouse events if mouse is enabled
+                if self.mouse_enabled {
+                    let area = tui.area();
+                    self.handle_mouse(mouse, area);
+                }
+            }
             crossterm::event::Event::Resize(_, _) => {
                 // Terminal was resized
             }
