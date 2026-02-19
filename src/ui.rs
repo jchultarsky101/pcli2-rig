@@ -360,12 +360,14 @@ fn render_logs(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
     // Show mini-help only when focused
     if is_focused {
         block = block.title_bottom(Line::from(Span::styled(
-            " ↑/↓ scroll, PgUp/PgDown fast ",
+            " ↑/↓ scroll, ←/→ hscroll, PgUp/PgDown fast ",
             Style::default().fg(colors::DIM),
         )));
     }
 
-    let logs_paragraph = Paragraph::new(log_lines).block(block);
+    let logs_paragraph = Paragraph::new(log_lines)
+        .block(block)
+        .scroll((0, app.log_hscroll_offset() as u16));
 
     frame.render_widget(logs_paragraph, area);
 }

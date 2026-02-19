@@ -64,6 +64,8 @@ pub struct App {
     scroll_offset: usize,
     /// Scroll offset for logs (0 = at bottom)
     log_scroll_offset: usize,
+    /// Horizontal scroll offset for logs
+    log_hscroll_offset: usize,
     /// Which pane has focus (0=chat, 1=input, 2=logs)
     focus_pane: usize,
     /// Queue of messages waiting to be sent
@@ -103,6 +105,7 @@ impl App {
             max_logs: 100,
             scroll_offset: 0,
             log_scroll_offset: 0,
+            log_hscroll_offset: 0,
             focus_pane: 1, // Start with input focused
             message_queue: Vec::new(),
             show_help: false,
@@ -351,11 +354,17 @@ Type /help for available commands · Type /quit to exit
             KeyCode::Left => {
                 if self.focus_pane == 1 && self.cursor_pos > 0 {
                     self.cursor_pos -= 1;
+                } else if self.focus_pane == 2 {
+                    // Logs: horizontal scroll left
+                    self.log_hscroll_offset = self.log_hscroll_offset.saturating_sub(1);
                 }
             }
             KeyCode::Right => {
                 if self.focus_pane == 1 && self.cursor_pos < self.input.len() {
                     self.cursor_pos += 1;
+                } else if self.focus_pane == 2 {
+                    // Logs: horizontal scroll right
+                    self.log_hscroll_offset = self.log_hscroll_offset.saturating_add(1);
                 }
             }
             KeyCode::Home => {
@@ -829,10 +838,21 @@ Type /help for available commands · Type /quit to exit
         self.log_scroll_offset
     }
 
+    /// Get log horizontal scroll offset
+    pub fn log_hscroll_offset(&self) -> usize {
+        self.log_hscroll_offset
+    }
+
+    /// Reset horizontal scroll to beginning
+    pub fn reset_log_hscroll(&mut self) {
+        self.log_hscroll_offset = 0;
+    }
+
     /// Reset scroll to bottom
     pub fn reset_scroll(&mut self) {
         self.scroll_offset = 0;
         self.log_scroll_offset = 0;
+        self.reset_log_hscroll();
     }
 
     /// Sync logs from shared buffer
@@ -923,6 +943,18 @@ Type /help for available commands · Type /quit to exit
                     self.scroll_offset = self.scroll_offset.saturating_sub(3);
                 } else if self.focus_pane == 2 {
                     self.log_scroll_offset = self.log_scroll_offset.saturating_sub(3);
+                }
+            }
+            MouseEventKind::ScrollLeft => {
+                // Horizontal scroll left in logs pane
+                if self.focus_pane == 2 {
+                    self.log_hscroll_offset = self.log_hscroll_offset.saturating_sub(5);
+                }
+            }
+            MouseEventKind::ScrollRight => {
+                // Horizontal scroll right in logs pane
+                if self.focus_pane == 2 {
+                    self.log_hscroll_offset = self.log_hscroll_offset.saturating_add(5);
                 }
             }
             _ => {}
