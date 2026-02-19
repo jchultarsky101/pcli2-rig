@@ -622,20 +622,35 @@ Type /help for available commands · Type /quit to exit
                 self.agent.add_assistant_message(msg);
             }
             "tools" => {
-                let tools = self.agent.mcp_tools();
-                if tools.is_empty() {
-                    self.agent.add_assistant_message(
-                        "No MCP tools available. Connect to an MCP server first.".to_string(),
-                    );
-                } else {
-                    let mut msg = String::from("Available MCP tools:\n");
-                    for tool in tools {
-                        msg.push_str(&format!(
-                            "  • {} (from {})\n    {}\n",
-                            tool.name, tool.server, tool.description
-                        ));
+                // Try to get actual tool definitions from ToolServer
+                if let Some(handle) = self.agent.tool_server_handle() {
+                    match handle.get_tool_defs(None).await {
+                        Ok(tool_defs) => {
+                            if tool_defs.is_empty() {
+                                self.agent.add_assistant_message(
+                                    "No MCP tools available.".to_string(),
+                                );
+                            } else {
+                                let mut msg = String::from("Available MCP tools:\n");
+                                for tool in tool_defs {
+                                    msg.push_str(&format!(
+                                        "  • {}\n    {}\n",
+                                        tool.name, tool.description
+                                    ));
+                                }
+                                self.agent.add_assistant_message(msg);
+                            }
+                        }
+                        Err(e) => {
+                            self.agent.add_assistant_message(
+                                format!("Failed to get tool definitions: {}", e),
+                            );
+                        }
                     }
-                    self.agent.add_assistant_message(msg);
+                } else {
+                    self.agent.add_assistant_message(
+                        "No MCP server connected. Configure with --setup-mcp or --mcp-remote.".to_string(),
+                    );
                 }
             }
             "add" => {

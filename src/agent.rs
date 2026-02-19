@@ -269,7 +269,7 @@ impl Agent {
 
                     // Create custom Rig tools for each MCP tool
                     for tool in &tools {
-                        info!("Registering MCP tool: {}", tool.name);
+                        info!("Registering MCP tool: {} - {}", tool.name, tool.description.as_ref().unwrap_or(&"".into()));
                         let mcp_tool = McpRigTool::new(
                             tool.clone(),
                             client.clone(),
@@ -298,14 +298,17 @@ impl Agent {
                     Vec::new()
                 }
             };
-            
+
             if !tool_defs.is_empty() {
                 let tool_names: Vec<&str> = tool_defs.iter().map(|t| t.name.as_str()).collect();
                 let tools_str = tool_names.join(", ");
+                tracing::info!("Registered MCP tools: {}", tools_str);
                 self.preamble = format!(
                     r#"You are PCLI2-RIG, a helpful AI coding assistant running in a terminal TUI.
 
 You have access to the following MCP tools: {}
+
+When the user asks about folders, assets, tenants, or configuration, use the appropriate pcli2 MCP tool instead of shell commands.
 
 When using tools:
 1. Think carefully about what the user is asking
@@ -317,7 +320,7 @@ You are running on the user's local machine via Ollama."#,
                     tools_str
                 );
             }
-            
+
             self.tool_server_handle = Some(handle);
         }
     }
