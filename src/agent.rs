@@ -538,11 +538,14 @@ You are running on the user's local machine via Ollama."#
             // Provide specific error messages based on error type
             if error_str.contains("MaxTurnError") {
                 anyhow::anyhow!(
-                    "Agent reached maximum turn limit (0). This usually means:\n\
-                     1. The model is stuck in a tool-calling loop\n\
-                     2. Tool calls are failing repeatedly\n\
-                     3. The model needs clearer instructions\n\n\
-                     Try: Clear the chat history (/clear) and rephrase your request."
+                    "The model got stuck in a repetitive loop. This happens when:\n\
+                     • A tool keeps failing and the model retries indefinitely\n\
+                     • The model's tool requests don't match what the tools expect\n\
+                     • The conversation history is in a confused state\n\n\
+                     To fix this:\n\
+                     1. Type /clear to reset the conversation\n\
+                     2. Try your request again with different wording\n\
+                     3. If using tools, check that the tool arguments are correct"
                 )
             } else if error_str.contains("connection") || error_str.contains("connect") {
                 anyhow::anyhow!(
