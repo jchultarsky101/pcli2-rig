@@ -454,6 +454,21 @@ You are running on the user's local machine via Ollama."#
     async fn send_request(&self) -> Result<String> {
         debug!("Sending request to Ollama model: {}", self.model_name);
         debug!("Chat history has {} messages", self.chat_history.len());
+        debug!("Tool server handle present: {}", self.tool_server_handle.is_some());
+        
+        if let Some(handle) = &self.tool_server_handle {
+            match handle.get_tool_defs(None).await {
+                Ok(defs) => {
+                    debug!("Available tools: {}", defs.len());
+                    for def in &defs {
+                        debug!("  Tool: {} - {}", def.name, def.description);
+                    }
+                }
+                Err(e) => {
+                    debug!("Failed to get tool defs: {}", e);
+                }
+            }
+        }
 
         // Build conversation history for prompt
         let mut prompt_text = String::new();
@@ -487,7 +502,7 @@ You are running on the user's local machine via Ollama."#
                 .preamble(&self.preamble)
                 .tool_server_handle(tool_handle.clone())
                 .build();
-            
+
             agent.prompt(prompt_text).await
         } else {
             let agent = self
@@ -495,7 +510,7 @@ You are running on the user's local machine via Ollama."#
                 .agent(&self.model_name)
                 .preamble(&self.preamble)
                 .build();
-            
+
             agent.prompt(prompt_text).await
         }.map_err(|e| {
             anyhow::anyhow!(
