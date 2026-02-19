@@ -493,7 +493,7 @@ Type /help for available commands · Type /quit to exit
         let cancel_token = CancellationToken::new();
         self.cancel_token = Some(cancel_token.clone());
 
-        debug!("Sending message to agent: {}", input);
+        debug!("Message submitted to LLM");
 
         // Clone the input for the spawned task
         let input_clone = input.clone();
