@@ -110,6 +110,14 @@ async fn main() -> Result<()> {
 
     tracing::info!("Starting PCLI2-RIG with model: {}", args.model);
 
+    // Load configuration from file (if exists)
+    let mut config = Config::load();
+
+    // Override with CLI arguments
+    config.model = args.model.clone();
+    config.host = args.host.clone();
+    config.yolo = args.yolo;
+
     // Parse MCP configuration
     let mut mcp_servers = Vec::new();
 
@@ -143,13 +151,10 @@ async fn main() -> Result<()> {
         });
     }
 
-    // Create configuration
-    let config = Config {
-        model: args.model.clone(),
-        host: args.host.clone(),
-        yolo: args.yolo,
-        mcp_servers,
-    };
+    // If MCP servers were provided via CLI, use them; otherwise keep loaded config
+    if !mcp_servers.is_empty() {
+        config.mcp_servers = mcp_servers;
+    }
 
     // Create the application
     let mut app = App::new(config);

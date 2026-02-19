@@ -20,7 +20,6 @@ pub static LOG_BUFFER: once_cell::sync::Lazy<Arc<Mutex<Vec<String>>>> =
 #[derive(Debug)]
 pub enum AppMessage {
     Response(Result<String>),
-    McpConnected,
 }
 
 /// Pending tool call awaiting confirmation
@@ -114,12 +113,11 @@ impl App {
         let mcp_servers = self.config.mcp_servers.clone();
         if !mcp_servers.is_empty() {
             self.status = "Connecting to MCP servers...".to_string();
-            // We need to connect asynchronously, so spawn a task
-            let agent_tx = tx.clone();
-            tokio::spawn(async move {
-                // MCP connection would happen here in a real implementation
-                std::mem::drop(agent_tx.send(AppMessage::McpConnected).await);
-            });
+            // Connect to MCP servers asynchronously
+            self.agent.connect_mcp_servers(&mcp_servers).await;
+            let connected_count = self.agent.mcp_server_count();
+            self.status = format!("Ready | {} MCP server(s) connected", connected_count);
+            info!("Connected to {} MCP servers", connected_count);
         }
 
         // Timer for spinner animation (500ms interval)
@@ -493,18 +491,6 @@ Type /help for available commands · Type /quit to exit
                 self.agent
                     .add_assistant_message(format!("⚠ **Error:** {}", e));
                 tracing::error!("Received error: {}", e);
-            }
-            AppMessage::McpConnected => {
-                // MCP servers connected
-                let count = self.agent.mcp_server_count();
-                if count > 0 {
-                    self.status = format!("✓ {} MCP server(s) connected", count);
-                    self.agent.add_assistant_message(format!(
-                        "🔌 Connected to {} MCP server(s): {}",
-                        count,
-                        self.agent.mcp_connected().join(", ")
-                    ));
-                }
             }
         }
 
