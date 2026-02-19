@@ -211,7 +211,20 @@ impl std::io::Write for DualWriter {
             if !line.is_empty()
                 && let Ok(mut buffer) = self.buffer.lock()
             {
-                buffer.push(line);
+                // Add emoji prefix based on log level
+                let prefixed_line = if line.contains("ERROR") {
+                    format!("✗ {}", line)
+                } else if line.contains("WARN") {
+                    format!("⚠ {}", line)
+                } else if line.contains("INFO") {
+                    format!("✓ {}", line)
+                } else if line.contains("DEBUG") {
+                    format!("• {}", line)
+                } else {
+                    line
+                };
+                
+                buffer.push(prefixed_line);
                 // Keep only last 100 lines
                 if buffer.len() > 100 {
                     buffer.remove(0);
