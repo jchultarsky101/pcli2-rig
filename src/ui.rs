@@ -76,12 +76,12 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
     let history = app.agent().chat_history();
 
     // ASCII art banner (62 chars wide, 6 lines tall)
-    const ASCII_BANNER: &str = r#"  _____   _____ _      _____ ___        _____            _____ 
- |  __ \ / ____| |    |_   _|__ \      |  __ \     /\   / ____|
- | |__) | |    | |      | |    ) |_____| |__) |   /  \ | |  __ 
- |  ___/| |    | |      | |   / /______|  _  /   / /\ \| | |_ |
- | |    | |____| |____ _| |_ / /_      | | \ \  / ____ \ |__| |
- |_|     \_____|______|_____|____|     |_|  \_\/_/    \_\_____|"#;
+    const ASCII_BANNER: &str = r#"  _____   _____ _      _____ ___    _____  _____ _____ 
+ |  __ \ / ____| |    |_   _|__ \  |  __ \|_   _/ ____|
+ | |__) | |    | |      | |    ) | | |__) | | || |  __ 
+ |  ___/| |    | |      | |   / /  |  _  /  | || | |_ |
+ | |    | |____| |____ _| |_ / /_  | | \ \ _| || |__| |
+ |_|     \_____|______|_____|____| |_|  \_\_____\_____|"#;
 
     // Build all lines with background colors
     let mut all_lines: Vec<(Line, Option<ratatui::style::Color>)> = Vec::new();

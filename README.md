@@ -4,21 +4,28 @@ A beautiful TUI-based local AI agent powered by [Rig](https://github.com/0xPlayg
 
 ## Features
 
-- 🎨 **Beautiful Dark TUI** - Inspired by Qwen Code with gradient banner and emoji-rich interface
+- 🎨 **Beautiful Dark TUI** - Inspired by Qwen Code with ASCII banner and emoji-rich interface
 - 🤖 **Local AI** - Runs entirely on your laptop using Ollama
 - 🛠️ **Tool Support** - Built-in tools for file operations, command execution, and code search
 - 🔒 **Privacy First** - All inference happens locally, no data leaves your machine
 - ⚡ **Lightweight** - Optimized for quick startup and minimal resource usage
 - 🎯 **YOLO Mode** - Skip tool confirmation with `--yolo` flag for faster workflows
+- 🖱️ **Mouse Support** - Click to focus panes, scroll wheel navigation (toggle with Ctrl+M)
+- 📋 **Text Selection** - Copy/paste from chat history (mouse disabled by default)
+- 📜 **Help Modal** - Press `/help` for detailed command reference
+- 🔌 **MCP Support** - Model Context Protocol server integration
 
 ## Screenshot
 
 ```
-╔══════════════════════════════════════════════════════╗
-║  🤖  PCLI2-RIG  ·  Local AI Agent                    ║
-╚══════════════════════════════════════════════════════╝
+  _____   _____ _      _____ ___    _____  _____ _____ 
+ |  __ \ / ____| |    |_   _|__ \  |  __ \|_   _/ ____|
+ | |__) | |    | |      | |    ) | | |__) | | || |  __ 
+ |  ___/| |    | |      | |   / /  |  _  /  | || | |_ |
+ | |    | |____| |____ _| |_ / /_  | | \ \ _| || |__| |
+ |_|     \_____|______|_____|____| |_|  \_\_____\_____|
 
-┌─ Chat History ─────────────────────────────────────┐
+┌─ Chat History [5] ─────────────────────────────────┐
 │ 👤 You: Hello, can you help me with my code?       │
 │                                                     │
 │ 🤖 Assistant: Of course! I'd be happy to help.     │
@@ -26,11 +33,17 @@ A beautiful TUI-based local AI agent powered by [Rig](https://github.com/0xPlayg
 │                                                     │
 └─────────────────────────────────────────────────────┘
 
-┌─ Input ────────────────────────────────────────────┐
-│ I'm working on a Rust project...                   │
+┌─ Input │ qwen2.5-coder:3b │ 🔌0 ───────────────────┐
+│ I'm working on a Rust project... █                 │
 └─────────────────────────────────────────────────────┘
 
- Ready │ Model: qwen2.5-coder:3b │ Messages: 2
+┌─ Logs ─────────────────────────────────────────────┐
+│ ✓ INFO Starting PCLI2-RIG with model: ...          │
+│ ⋯ DEBUG Sending request to Ollama model: ...       │
+│ ✓ Ready                                            │
+└─────────────────────────────────────────────────────┘
+
+ ✓ Ready │ Model: qwen2.5-coder:3b 
 ```
 
 ## Installation
@@ -96,15 +109,47 @@ export OLLAMA_HOST=http://localhost:11434
 
 ### Keyboard Shortcuts
 
+#### Global
+
+| Key | Action |
+|-----|--------|
+| `Ctrl+C` | Quit application |
+| `Ctrl+K` | Clear chat history |
+| `Ctrl+M` | Toggle mouse mode (enable/disable text selection) |
+| `Tab` | Switch focus between panes |
+| `Shift+Tab` | Switch focus backwards |
+| `Esc` | Close modal dialogs |
+
+#### Input Pane (when focused)
+
 | Key | Action |
 |-----|--------|
 | `Enter` | Send message |
-| `Ctrl+C` | Quit |
-| `Ctrl+K` | Clear chat history |
-| `↑/↓` | Scroll through history |
-| `PageUp/PageDown` | Scroll faster |
-| `Y/n` | Confirm/cancel tool execution |
-| `Esc` | Cancel tool execution |
+| `↑/↓` | Move cursor in input |
+| `Home/End` | Jump to start/end of input |
+| `Backspace` | Delete character before cursor |
+| `Delete` | Delete character at cursor |
+
+#### Chat/Logs Panes (when focused)
+
+| Key | Action |
+|-----|--------|
+| `↑/↓` | Scroll 1 line |
+| `PageUp/PageDown` | Scroll 5 lines |
+
+#### Mouse Controls
+
+| Action | Effect |
+|--------|--------|
+| Left Click | Focus on clicked pane |
+| Scroll Wheel | Scroll in focused pane (3 lines) |
+
+#### Tool Confirmation
+
+| Key | Action |
+|-----|--------|
+| `Y` or `Enter` | Confirm tool execution |
+| `N` or `Esc` | Cancel tool execution |
 
 ## Built-in Tools
 
@@ -169,16 +214,48 @@ Use `--yolo` mode to skip confirmation for faster workflows.
 
 ## Configuration
 
+### Config File
+
+Create `~/.config/pcli2-rig/config.toml`:
+
+```toml
+model = "qwen2.5-coder:3b"
+host = "http://localhost:11434"
+yolo = false
+
+# MCP Server Configuration (optional)
+[[mcp_servers]]
+name = "filesystem"
+url = "http://localhost:3000"
+enabled = true
+
+[[mcp_servers]]
+name = "github"
+url = "http://localhost:3001"
+token = "ghp_..."  # Optional auth
+enabled = false
+```
+
+### MCP Commands
+
+| Command | Description |
+|---------|-------------|
+| `/mcp` | Show MCP server status |
+| `/mcp list` | List configured MCP servers |
+| `/mcp tools` | Show available MCP tools |
+
 ### Cargo.toml Dependencies
 
 The project uses these key dependencies:
 
-- `rig-core` - AI agent framework
+- `rig-core` - AI agent framework (with `rmcp` feature)
+- `rmcp` - Model Context Protocol client
 - `ratatui` - TUI framework
 - `crossterm` - Terminal backend
 - `tokio` - Async runtime
 - `clap` - CLI argument parsing
 - `tracing` - Logging
+- `tui-markdown` - Markdown rendering
 
 ### Model Selection
 
@@ -210,6 +287,20 @@ ollama pull qwen2.5-coder:3b
 
 Try resizing your terminal or check that your terminal supports UTF-8.
 
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `/help`, `/h`, `/?` | Show detailed help modal |
+| `/quit`, `/exit`, `/q` | Exit the application |
+| `/clear`, `/cls` | Clear chat history |
+| `/model [name]` | Show or set the current model |
+| `/history`, `/hist` | Show message count |
+| `/status` | Show current status |
+| `/mcp` | Show MCP server status |
+| `/mcp list` | List configured MCP servers |
+| `/mcp tools` | Show available MCP tools |
+
 ## Development
 
 ```bash
@@ -235,4 +326,4 @@ MIT License - see LICENSE file for details.
 - [Rig](https://github.com/0xPlaygrounds/rig) - Excellent Rust AI framework
 - [Ollama](https://ollama.com/) - Local LLM runner
 - [ratatui](https://ratatui.rs/) - Modern TUI library
-- [tui-banner](https://github.com/coolbeevip/tui-banner) - Beautiful ANSI banners
+- [tui-markdown](https://github.com/joshka/tui-markdown) - Markdown rendering for TUI
