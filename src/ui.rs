@@ -268,6 +268,22 @@ fn render_input(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
         colors::DIM
     };
 
+    // Calculate visible width for input (area width - padding for borders)
+    let visible_width = area.width.saturating_sub(2) as usize;
+
+    // Calculate horizontal scroll offset to keep cursor visible
+    let cursor_pos = app.cursor_pos();
+    let hscroll_offset = if cursor_pos < app.input_hscroll_offset() {
+        // Cursor moved left beyond visible area
+        cursor_pos
+    } else if visible_width > 0 && cursor_pos >= app.input_hscroll_offset() + visible_width {
+        // Cursor moved right beyond visible area
+        cursor_pos.saturating_sub(visible_width.saturating_sub(1))
+    } else {
+        // Keep current scroll offset
+        app.input_hscroll_offset()
+    };
+
     let input_text = if app.input().is_empty() {
         // Show placeholder with blinking block cursor at the start (only when focused)
         if is_focused {
@@ -317,7 +333,7 @@ fn render_input(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
                 .border_style(Style::default().fg(border_color))
                 .style(Style::default().bg(colors::BACKGROUND)),
         )
-        .scroll((0, app.input_hscroll_offset() as u16));
+        .scroll((0, hscroll_offset as u16));
 
     frame.render_widget(input, area);
 }
