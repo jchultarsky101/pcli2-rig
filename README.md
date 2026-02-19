@@ -97,6 +97,25 @@ pcli2-rig --yolo
 pcli2-rig --verbose
 ```
 
+### MCP Integration
+
+```bash
+# Load MCP servers from pcli2-mcp config (pipe from stdin)
+pcli2-mcp config | pcli2-rig --mcp-config -
+
+# Load MCP servers from config file
+pcli2-rig --mcp-config /path/to/mcp-config.json
+
+# Add MCP server URL directly
+pcli2-rig --mcp-remote http://localhost:8080/mcp
+
+# Multiple MCP servers
+pcli2-rig --mcp-remote http://localhost:8080/mcp --mcp-remote http://localhost:8081/mcp
+
+# Combine config file with direct URLs
+pcli2-mcp config | pcli2-rig --mcp-config - --mcp-remote http://localhost:9000/mcp
+```
+
 ### Environment Variables
 
 ```bash

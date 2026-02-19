@@ -8,11 +8,12 @@
 
 use anyhow::Result;
 use clap::Parser;
+use serde_json::Value;
 use std::sync::{Arc, Mutex};
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 use app::{App, LOG_BUFFER};
-use config::Config;
+use config::{Config, McpServerConfig};
 use tui::Tui;
 
 mod agent;
@@ -48,6 +49,14 @@ struct Args {
     /// Enable verbose logging
     #[arg(short, long, default_value = "false")]
     verbose: bool,
+
+    /// Load MCP servers from pcli2-mcp config JSON (file path or "-" for stdin)
+    #[arg(long, value_name = "FILE")]
+    mcp_config: Option<String>,
+
+    /// Add MCP server URL directly (can be used multiple times)
+    #[arg(long, value_name = "URL")]
+    mcp_remote: Vec<String>,
 }
 
 #[tokio::main]
@@ -91,12 +100,45 @@ async fn main() -> Result<()> {
 
     tracing::info!("Starting PCLI2-RIG with model: {}", args.model);
 
+    // Parse MCP configuration
+    let mut mcp_servers = Vec::new();
+
+    // Load from pcli2-mcp config file/stdin
+    if let Some(config_path) = &args.mcp_config {
+        let json_content = if config_path == "-" {
+            // Read from stdin
+            use std::io::Read;
+            let mut buffer = String::new();
+            std::io::stdin().read_to_string(&mut buffer)?;
+            buffer
+        } else {
+            // Read from file
+            std::fs::read_to_string(config_path)?
+        };
+
+        // Parse pcli2-mcp JSON format
+        if let Ok(mcp_config) = parse_mcp_config(&json_content) {
+            mcp_servers.extend(mcp_config);
+            tracing::info!("Loaded {} MCP servers from config", mcp_servers.len());
+        }
+    }
+
+    // Add direct MCP remote URLs
+    for url in &args.mcp_remote {
+        mcp_servers.push(McpServerConfig {
+            name: format!("remote-{}", mcp_servers.len()),
+            url: url.clone(),
+            token: None,
+            enabled: true,
+        });
+    }
+
     // Create configuration
     let config = Config {
         model: args.model.clone(),
         host: args.host.clone(),
         yolo: args.yolo,
-        mcp_servers: Vec::new(),
+        mcp_servers,
     };
 
     // Create the application
@@ -170,4 +212,47 @@ impl<'a> tracing_subscriber::fmt::writer::MakeWriter<'a> for DualWriter {
     fn make_writer(&'a self) -> Self::Writer {
         self.clone()
     }
+}
+
+/// Parse pcli2-mcp JSON configuration format
+/// Expected format:
+/// {
+///   "mcpServers": {
+///     "server_name": {
+///       "command": "npx",
+///       "args": ["-y", "mcp-remote", "http://localhost:8080/mcp"]
+///     }
+///   }
+/// }
+fn parse_mcp_config(json: &str) -> Result<Vec<McpServerConfig>> {
+    let value: Value = serde_json::from_str(json)?;
+    let mut servers = Vec::new();
+
+    if let Some(mcp_servers) = value.get("mcpServers").and_then(|v| v.as_object()) {
+        for (name, config) in mcp_servers {
+            // Extract URL from args (look for http:// or https:// URLs)
+            let mut url = None;
+            if let Some(args) = config.get("args").and_then(|a| a.as_array()) {
+                for arg in args {
+                    if let Some(arg_str) = arg.as_str()
+                        && (arg_str.starts_with("http://") || arg_str.starts_with("https://")) {
+                            url = Some(arg_str.to_string());
+                            break;
+                        }
+                }
+            }
+
+            if let Some(server_url) = url {
+                tracing::info!("Parsed MCP server: {} -> {}", name, server_url);
+                servers.push(McpServerConfig {
+                    name: name.clone(),
+                    url: server_url,
+                    token: None,
+                    enabled: true,
+                });
+            }
+        }
+    }
+
+    Ok(servers)
 }
