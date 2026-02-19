@@ -533,13 +533,34 @@ You are running on the user's local machine via Ollama."#
             debug!("Sending prompt to agent with model: {}", self.model_name);
             agent.prompt(prompt_text).await
         }.map_err(|e| {
-            anyhow::anyhow!(
-                "Ollama request failed: {}\n\n\
+            let error_str = e.to_string();
+            
+            // Provide specific error messages based on error type
+            if error_str.contains("MaxTurnError") {
+                anyhow::anyhow!(
+                    "Agent reached maximum turn limit (0). This usually means:\n\
+                     1. The model is stuck in a tool-calling loop\n\
+                     2. Tool calls are failing repeatedly\n\
+                     3. The model needs clearer instructions\n\n\
+                     Try: Clear the chat history (/clear) and rephrase your request."
+                )
+            } else if error_str.contains("connection") || error_str.contains("connect") {
+                anyhow::anyhow!(
+                    "Cannot connect to Ollama: {}\n\n\
                      Make sure Ollama is running (`ollama serve`) and \
                      the model is pulled (`ollama pull {}`).",
-                e,
-                self.model_name
-            )
+                    e,
+                    self.model_name
+                )
+            } else {
+                anyhow::anyhow!(
+                    "Ollama request failed: {}\n\n\
+                     Make sure Ollama is running (`ollama serve`) and \
+                     the model is pulled (`ollama pull {}`).",
+                    e,
+                    self.model_name
+                )
+            }
         })?;
 
         debug!("Received response: {} chars", response.len());
