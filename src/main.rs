@@ -57,11 +57,21 @@ struct Args {
     /// Add MCP server URL directly (can be used multiple times)
     #[arg(long, value_name = "URL")]
     mcp_remote: Vec<String>,
+
+    /// Configure MCP servers from pcli2-mcp and save to config file (one-time setup)
+    /// This will read the pcli2-mcp config and save it to ~/.config/pcli2-rig/config.toml
+    #[arg(long, value_name = "FILE")]
+    setup_mcp: Option<String>,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
+
+    // Handle --setup-mcp: one-time MCP configuration
+    if let Some(config_path) = &args.setup_mcp {
+        return setup_mcp_config(config_path);
+    }
 
     // Initialize logging to file and shared buffer
     let filter = if args.verbose {
@@ -255,4 +265,66 @@ fn parse_mcp_config(json: &str) -> Result<Vec<McpServerConfig>> {
     }
 
     Ok(servers)
+}
+
+/// Setup MCP configuration from pcli2-mcp and save to config file
+/// This is a one-time setup command
+fn setup_mcp_config(config_path: &str) -> Result<()> {
+    use std::fs;
+    use std::io::Read;
+
+    // Read the pcli2-mcp config
+    let json_content = if config_path == "-" {
+        // Read from stdin
+        let mut buffer = String::new();
+        std::io::stdin().read_to_string(&mut buffer)?;
+        buffer
+    } else {
+        // Read from file
+        fs::read_to_string(config_path)?
+    };
+
+    // Parse MCP servers from pcli2-mcp format
+    let mcp_servers = parse_mcp_config(&json_content)?;
+
+    if mcp_servers.is_empty() {
+        eprintln!("No MCP servers found in configuration");
+        std::process::exit(1);
+    }
+
+    // Determine config directory and file path
+    let config_dir = dirs::config_dir()
+        .unwrap_or_else(|| dirs::home_dir().map(|h| h.join(".config")).unwrap())
+        .join("pcli2-rig");
+    let config_file = config_dir.join("config.toml");
+
+    // Create config directory if it doesn't exist
+    fs::create_dir_all(&config_dir)?;
+
+    // Load existing config or create default
+    let mut config = if config_file.exists() {
+        let content = fs::read_to_string(&config_file)?;
+        toml::from_str::<Config>(&content).unwrap_or_default()
+    } else {
+        Config::default()
+    };
+
+    // Update MCP servers
+    config.mcp_servers = mcp_servers.clone();
+
+    // Save configuration
+    let toml_content = toml::to_string_pretty(&config)?;
+    fs::write(&config_file, &toml_content)?;
+
+    println!("✓ MCP configuration saved to {}", config_file.display());
+    println!();
+    println!("Configured {} MCP server(s):", mcp_servers.len());
+    for server in &mcp_servers {
+        println!("  • {} → {}", server.name, server.url);
+    }
+    println!();
+    println!("You can now run: pcli2-rig");
+    println!("Or edit config at: {}", config_file.display());
+
+    Ok(())
 }

@@ -99,6 +99,20 @@ pcli2-rig --verbose
 
 ### MCP Integration
 
+#### One-Time Setup (Recommended)
+
+Configure MCP servers permanently by saving to the config file:
+
+```bash
+# Pipe pcli2-mcp config directly (recommended)
+pcli2-mcp config | pcli2-rig --setup-mcp -
+
+# Or from a config file
+pcli2-rig --setup-mcp /path/to/mcp-config.json
+```
+
+This saves the MCP configuration to `~/.config/pcli2-rig/config.toml` (or platform-specific config directory). You only need to run this once, or whenever you want to update your MCP server configuration.
+
 #### Using pcli2-mcp Server
 
 1. **Build and start the MCP server**:
@@ -119,7 +133,9 @@ pcli2-rig --verbose
    pcli2-rig --mcp-remote http://localhost:8080/mcp --mcp-remote http://localhost:8081/mcp
    ```
 
-#### Using pcli2-mcp Config Output
+#### Temporary Session (No Config File)
+
+Load MCP servers for a single session without saving:
 
 ```bash
 # Load MCP servers from pcli2-mcp config (pipe from stdin)
@@ -129,10 +145,10 @@ pcli2-mcp config | pcli2-rig --mcp-config -
 pcli2-mcp config | pcli2-rig --mcp-config - --mcp-remote http://localhost:9000/mcp
 ```
 
-#### Loading from Config File
+#### Loading from Config File (Temporary)
 
 ```bash
-# Load MCP servers from config file
+# Load MCP servers from config file for this session only
 pcli2-rig --mcp-config /path/to/mcp-config.json
 ```
 
@@ -346,8 +362,9 @@ Try resizing your terminal or check that your terminal supports UTF-8.
 |--------|-------------|
 | `--model <MODEL>` | Set the Ollama model to use |
 | `--host <HOST>` | Set the Ollama server host (default: `http://localhost:11434`) |
-| `--mcp-config <PATH>` | Load MCP servers from config file (use `-` for stdin) |
-| `--mcp-remote <URL>` | Add an MCP server URL directly |
+| `--setup-mcp <FILE>` | **One-time setup:** Load MCP servers from pcli2-mcp config and save to config file |
+| `--mcp-config <PATH>` | Load MCP servers from config file for this session only (use `-` for stdin) |
+| `--mcp-remote <URL>` | Add an MCP server URL directly (can be used multiple times) |
 | `--yolo` | Skip tool confirmation prompts |
 | `--verbose` | Enable verbose logging |
 | `--help`, `-h` | Show CLI help |
