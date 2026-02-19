@@ -82,6 +82,12 @@ pub struct App {
     sys: sysinfo::System,
     /// Cancellation token for in-flight requests
     cancel_token: Option<CancellationToken>,
+    /// Input history for Up/Down navigation (bash-style)
+    input_history: Vec<String>,
+    /// Current position in input history (0 = newest, higher = older)
+    history_index: usize,
+    /// Temporary storage for original input when browsing history
+    history_original: String,
 }
 
 impl App {
@@ -114,6 +120,9 @@ impl App {
             cpu_history: Vec::new(),
             sys,
             cancel_token: None,
+            input_history: Vec::new(),
+            history_index: 0,
+            history_original: String::new(),
         }
     }
 
@@ -383,6 +392,9 @@ Type /help for available commands · Type /quit to exit
                 if self.focus_pane == 0 {
                     // Chat: scroll up to see older messages
                     self.scroll_offset = self.scroll_offset.saturating_add(1);
+                } else if self.focus_pane == 1 {
+                    // Input: navigate to previous command in history
+                    self.navigate_history(-1);
                 } else if self.focus_pane == 2 {
                     // Logs: scroll up
                     self.log_scroll_offset = self.log_scroll_offset.saturating_add(1);
@@ -392,6 +404,9 @@ Type /help for available commands · Type /quit to exit
                 if self.focus_pane == 0 {
                     // Chat: scroll down to see newer messages
                     self.scroll_offset = self.scroll_offset.saturating_sub(1);
+                } else if self.focus_pane == 1 {
+                    // Input: navigate to next command in history
+                    self.navigate_history(1);
                 } else if self.focus_pane == 2 {
                     // Logs: scroll down
                     self.log_scroll_offset = self.log_scroll_offset.saturating_sub(1);
@@ -442,6 +457,12 @@ Type /help for available commands · Type /quit to exit
         if input.trim().starts_with('/') {
             self.handle_command(&input).await?;
             return Ok(());
+        }
+
+        // Save non-empty input to history
+        if !input.trim().is_empty() {
+            self.input_history.push(input.clone());
+            self.history_index = 0; // Reset history position
         }
 
         // If already thinking, queue the message
@@ -875,13 +896,44 @@ Type /help for available commands · Type /quit to exit
     pub fn sample_cpu(&mut self) {
         self.sys.refresh_cpu_usage();
         let cpu_usage = self.sys.global_cpu_usage();
-        
+
         self.cpu_history.push(cpu_usage);
-        
+
         // Keep only the last N samples
         if self.cpu_history.len() > CPU_HISTORY_SIZE {
             self.cpu_history.remove(0);
         }
+    }
+
+    /// Navigate input history (bash-style with Up/Down arrows)
+    pub fn navigate_history(&mut self, direction: i32) {
+        if self.input_history.is_empty() {
+            return;
+        }
+
+        if direction < 0 {
+            // Up arrow: go to older command
+            if self.history_index == 0 {
+                // Save current input before browsing history
+                self.history_original = self.input.clone();
+            }
+            self.history_index = (self.history_index + 1).min(self.input_history.len());
+        } else {
+            // Down arrow: go to newer command
+            if self.history_index > 0 {
+                self.history_index -= 1;
+            }
+        }
+
+        // Load the command from history
+        if self.history_index > 0 {
+            let idx = self.input_history.len() - self.history_index;
+            self.input = self.input_history[idx].clone();
+        } else {
+            // Restore original input
+            self.input = self.history_original.clone();
+        }
+        self.cursor_pos = self.input.len(); // Move cursor to end
     }
 
     /// Get CPU history for sparkline rendering
@@ -1024,7 +1076,7 @@ Global:
 
 Input Pane (when focused):
   Enter           Send message
-  ↑/↓             Move cursor in input
+  ↑/↓             Previous/next command in history (or move cursor)
   Home/End        Jump to start/end of input
   Backspace       Delete character before cursor
   Delete          Delete character at cursor
