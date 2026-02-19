@@ -99,25 +99,62 @@ pcli2-rig --verbose
 
 ### MCP Integration
 
-#### One-Time Setup (Recommended)
+PCLI2-RIG integrates with [pcli2-mcp](https://github.com/jchultarsky101/pcli2-mcp) to provide access to external tools and services via the Model Context Protocol (MCP).
 
-Configure MCP servers permanently by saving to the config file:
+#### Quick Setup (Recommended)
+
+The easiest way to configure MCP is using the `--setup-mcp` option, which reads the pcli2-mcp configuration and saves it permanently:
 
 ```bash
-# Pipe pcli2-mcp config directly (recommended)
+# One-time setup: pipe pcli2-mcp config directly
 pcli2-mcp config | pcli2-rig --setup-mcp -
-
-# Or from a config file
-pcli2-rig --setup-mcp /path/to/mcp-config.json
 ```
 
-This saves the MCP configuration to `~/.config/pcli2-rig/config.toml` (or platform-specific config directory). You only need to run this once, or whenever you want to update your MCP server configuration.
+This will:
+1. Parse the pcli2-mcp JSON configuration
+2. Extract MCP server URLs from the config
+3. Save them to `~/.config/pcli2-rig/config.toml` (or platform-specific config directory)
+4. Display confirmation with configured servers
 
-#### Using pcli2-mcp Server
+After setup, just run `pcli2-rig` normally—your MCP servers will be loaded automatically.
 
-1. **Build and start the MCP server**:
+#### Example pcli2-mcp Config Format
+
+The pcli2-mcp config JSON looks like this:
+
+```json
+{
+  "mcpServers": {
+    "pcli2": {
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://localhost:8080/mcp"
+      ],
+      "command": "npx"
+    },
+    "filesystem": {
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://localhost:8081/mcp"
+      ],
+      "command": "npx"
+    }
+  }
+}
+```
+
+PCLI2-RIG extracts the HTTP/HTTPS URLs from the `args` array and configures them as MCP servers.
+
+#### Alternative: Manual Server Setup
+
+If you prefer to run the MCP server manually:
+
+1. **Build and start pcli2-mcp**:
    ```bash
    # Build pcli2-mcp
+   cd /path/to/pcli2-mcp
    cargo build --release
 
    # Start the server (default port 8080)
@@ -126,7 +163,7 @@ This saves the MCP configuration to `~/.config/pcli2-rig/config.toml` (or platfo
 
 2. **Connect pcli2-rig to the MCP server**:
    ```bash
-   # Add MCP server URL directly
+   # Add MCP server URL directly (session-only)
    pcli2-rig --mcp-remote http://localhost:8080/mcp
 
    # Multiple MCP servers
@@ -135,21 +172,44 @@ This saves the MCP configuration to `~/.config/pcli2-rig/config.toml` (or platfo
 
 #### Temporary Session (No Config File)
 
-Load MCP servers for a single session without saving:
+For one-off sessions without saving configuration:
 
 ```bash
 # Load MCP servers from pcli2-mcp config (pipe from stdin)
 pcli2-mcp config | pcli2-rig --mcp-config -
 
-# Combine config file with direct URLs
+# Combine with additional direct URLs
 pcli2-mcp config | pcli2-rig --mcp-config - --mcp-remote http://localhost:9000/mcp
 ```
 
-#### Loading from Config File (Temporary)
+#### Manual Config File Editing
+
+You can also edit the config file directly at `~/.config/pcli2-rig/config.toml`:
+
+```toml
+model = "qwen2.5-coder:3b"
+host = "http://localhost:11434"
+yolo = false
+
+[[mcp_servers]]
+name = "pcli2"
+url = "http://localhost:8080/mcp"
+enabled = true
+
+[[mcp_servers]]
+name = "filesystem"
+url = "http://localhost:8081/mcp"
+enabled = true
+```
+
+#### Verifying MCP Configuration
+
+Once configured, you can verify MCP servers are loaded:
 
 ```bash
-# Load MCP servers from config file for this session only
-pcli2-rig --mcp-config /path/to/mcp-config.json
+# Inside pcli2-rig, use the /mcp command
+/mcp list      # List configured MCP servers
+/mcp tools     # Show available MCP tools
 ```
 
 ### Environment Variables
