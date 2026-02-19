@@ -98,7 +98,8 @@ async fn main() -> Result<()> {
             .with_thread_ids(false)
             .with_file(false)
             .with_line_number(false)
-            .without_time();
+            .without_time()
+            .with_ansi(false);  // Disable ANSI colors for file output
 
         tracing_subscriber::registry()
             .with(file_layer)
