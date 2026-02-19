@@ -28,7 +28,7 @@ toml = "0.8"
 
 # AI Framework
 rig-core = { version = "0.31", features = ["rmcp"] }
-rmcp = "0.1"
+rmcp = { version = "0.13", features = ["client-side-sse", "client", "transport-streamable-http-client-reqwest"] }
 
 # TUI
 ratatui = "0.30"

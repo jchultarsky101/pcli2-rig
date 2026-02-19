@@ -5,6 +5,7 @@ use rig::{
     client::{CompletionClient, Nothing},
     completion::Prompt,
     providers::ollama,
+    tool::server::ToolServer,
 };
 use tracing::{debug, info};
 
@@ -49,10 +50,10 @@ pub struct Agent {
     model_name: String,
     preamble: String,
     chat_history: Vec<ChatMessage>,
-    /// Connected MCP servers and their tools
-    mcp_tools: Vec<McpTool>,
-    /// MCP server connection status
+    /// Connected MCP servers
     mcp_connected: Vec<String>,
+    /// Tool server handle for MCP tools
+    tool_server_handle: Option<rig::tool::server::ToolServerHandle>,
 }
 
 impl Agent {
@@ -69,15 +70,16 @@ impl Agent {
             model_name: config.model.clone(),
             preamble: Self::default_preamble(),
             chat_history: Vec::new(),
-            mcp_tools: Vec::new(),
             mcp_connected: Vec::new(),
+            tool_server_handle: None,
         })
     }
 
     /// Connect to MCP servers and discover tools
-    #[allow(dead_code)]
     pub async fn connect_mcp_servers(&mut self, servers: &[McpServerConfig]) {
         info!("Connecting to {} MCP servers", servers.len());
+
+        let mut tool_server = ToolServer::new();
 
         for server in servers {
             if !server.enabled {
@@ -89,16 +91,31 @@ impl Agent {
                 server.name, server.url
             );
 
-            // Try to connect to the MCP server
+            // Try to connect to the MCP server using Streamable HTTP transport
             match self.connect_mcp_server(&server.url, &server.name).await {
-                Ok(tools) => {
-                    info!(
-                        "Connected to MCP server '{}': {} tools available",
-                        server.name,
-                        tools.len()
-                    );
-                    self.mcp_tools.extend(tools);
-                    self.mcp_connected.push(server.name.clone());
+                Ok(running_service) => {
+                    info!("Connected to MCP server '{}'", server.name);
+                    
+                    // Get the peer (server sink) for tool calls
+                    let peer = running_service.peer().clone();
+                    
+                    // List available tools from this server
+                    match peer.list_tools(Default::default()).await {
+                        Ok(tools_response) => {
+                            info!("Found {} tools from MCP server '{}'", tools_response.tools.len(), server.name);
+                            
+                            // Register each tool with the tool server
+                            for tool in tools_response.tools {
+                                info!("Registering MCP tool: {}", tool.name);
+                                tool_server = tool_server.rmcp_tool(tool, peer.clone());
+                            }
+                            
+                            self.mcp_connected.push(server.name.clone());
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to list tools from MCP server '{}': {}", server.name, e);
+                        }
+                    }
                 }
                 Err(e) => {
                     tracing::warn!("Failed to connect to MCP server '{}': {}", server.name, e);
@@ -106,12 +123,24 @@ impl Agent {
             }
         }
 
-        // Update preamble to mention MCP tools if connected
-        if !self.mcp_tools.is_empty() {
-            let tool_names: Vec<&str> = self.mcp_tools.iter().map(|t| t.name.as_str()).collect();
-            let tools_str = tool_names.join(", ");
-            self.preamble = format!(
-                r#"You are PCLI2-RIG, a helpful AI coding assistant running in a terminal TUI.
+        // Start the tool server and get a handle
+        if !self.mcp_connected.is_empty() {
+            let handle = tool_server.run();
+            
+            // Update preamble to mention MCP tools
+            let tool_defs = match handle.get_tool_defs(None).await {
+                Ok(defs) => defs,
+                Err(e) => {
+                    tracing::warn!("Failed to get tool definitions: {}", e);
+                    Vec::new()
+                }
+            };
+            
+            if !tool_defs.is_empty() {
+                let tool_names: Vec<&str> = tool_defs.iter().map(|t| t.name.as_str()).collect();
+                let tools_str = tool_names.join(", ");
+                self.preamble = format!(
+                    r#"You are PCLI2-RIG, a helpful AI coding assistant running in a terminal TUI.
 
 You have access to the following MCP tools: {}
 
@@ -122,25 +151,27 @@ When using tools:
 
 Be concise but helpful. Use formatting like code blocks when appropriate.
 You are running on the user's local machine via Ollama."#,
-                tools_str
-            );
+                    tools_str
+                );
+            }
+            
+            self.tool_server_handle = Some(handle);
         }
     }
 
-    /// Connect to a single MCP server and fetch its tools
-    async fn connect_mcp_server(&self, _url: &str, name: &str) -> Result<Vec<McpTool>> {
-        // For now, we'll create placeholder tools based on server config
-        // In a full implementation, this would use the rmcp client to discover actual tools
-        let mut tools = Vec::new();
-
-        // Placeholder: create a generic tool for each server
-        tools.push(McpTool {
-            name: format!("{}_tool", name.replace("-", "_")),
-            description: format!("Tool provided by MCP server '{}'", name),
-            server: name.to_string(),
-        });
-
-        Ok(tools)
+    /// Connect to a single MCP server using Streamable HTTP transport
+    async fn connect_mcp_server(&self, url: &str, _name: &str) -> Result<rmcp::service::RunningService<rmcp::RoleClient, ()>> {
+        use rmcp::{ServiceExt, transport::streamable_http_client::StreamableHttpClientTransport};
+        
+        // Create transport from URL
+        let transport = StreamableHttpClientTransport::from_uri(url);
+        
+        // Serve the client
+        let client = ().serve(transport)
+            .await
+            .context("Failed to serve MCP client")?;
+        
+        Ok(client)
     }
 
     /// Default system preamble
@@ -207,14 +238,27 @@ You are running on the user's local machine via Ollama."#
         &self.mcp_connected
     }
 
-    /// Get available MCP tools
-    pub fn mcp_tools(&self) -> &[McpTool] {
-        &self.mcp_tools
+    /// Get available MCP tools (placeholder - tools are managed by ToolServer)
+    #[allow(dead_code)]
+    pub fn mcp_tools(&self) -> Vec<McpTool> {
+        // Tools are now managed dynamically by the ToolServer
+        // This returns placeholder info based on connected servers
+        self.mcp_connected.iter().map(|server| McpTool {
+            name: format!("{}_tools", server),
+            description: format!("Tools from MCP server '{}'", server),
+            server: server.clone(),
+        }).collect()
     }
 
     /// Get count of connected MCP servers
     pub fn mcp_server_count(&self) -> usize {
         self.mcp_connected.len()
+    }
+
+    /// Get tool server handle
+    #[allow(dead_code)]
+    pub fn tool_server_handle(&self) -> Option<&rig::tool::server::ToolServerHandle> {
+        self.tool_server_handle.as_ref()
     }
 
     /// Send a message and get a response (without adding user message to history)
@@ -247,13 +291,6 @@ You are running on the user's local machine via Ollama."#
         debug!("Sending request to Ollama model: {}", self.model_name);
         debug!("Chat history has {} messages", self.chat_history.len());
 
-        // Build the agent with preamble
-        let agent = self
-            .client
-            .agent(&self.model_name)
-            .preamble(&self.preamble)
-            .build();
-
         // Build conversation history for prompt
         let mut prompt_text = String::new();
 
@@ -277,8 +314,26 @@ You are running on the user's local machine via Ollama."#
 
         debug!("Prompt text length: {} chars", prompt_text.len());
 
-        // Send the request with detailed error handling
-        let response = agent.prompt(prompt_text).await.map_err(|e| {
+        // Build the agent with or without tools
+        let response = if let Some(tool_handle) = &self.tool_server_handle {
+            debug!("Attaching tool server handle with {} MCP servers connected", self.mcp_connected.len());
+            let agent = self
+                .client
+                .agent(&self.model_name)
+                .preamble(&self.preamble)
+                .tool_server_handle(tool_handle.clone())
+                .build();
+            
+            agent.prompt(prompt_text).await
+        } else {
+            let agent = self
+                .client
+                .agent(&self.model_name)
+                .preamble(&self.preamble)
+                .build();
+            
+            agent.prompt(prompt_text).await
+        }.map_err(|e| {
             anyhow::anyhow!(
                 "Ollama request failed: {}\n\n\
                      Make sure Ollama is running (`ollama serve`) and \
