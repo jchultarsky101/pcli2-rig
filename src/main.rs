@@ -77,8 +77,8 @@ async fn main() -> Result<()> {
     let filter = if args.verbose {
         EnvFilter::new("debug")
     } else {
-        // Filter out noisy warnings from markdown parser about unsupported syntaxes
-        EnvFilter::new("info,pulldown_cmark=off,tui_markdown=off")
+        // Filter out noisy warnings and verbose OpenTelemetry logs
+        EnvFilter::new("info,pulldown_cmark=off,tui_markdown=off,rig_core::pipeline::agent=off,rmcp=off")
     };
 
     // Set up file logging with custom writer that also updates shared buffer
