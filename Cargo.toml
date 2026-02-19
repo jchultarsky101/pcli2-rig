@@ -9,6 +9,7 @@ repository = "https://github.com/jchultarsky101/pcli2-rig.git"
 [dependencies]
 # Async runtime
 tokio = { version = "1.43", features = ["full", "rt-multi-thread", "macros"] }
+tokio-util = { version = "0.7", features = ["rt"] }
 
 # Error handling
 thiserror = "2.0"

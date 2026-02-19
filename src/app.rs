@@ -5,6 +5,7 @@ use crossterm::event::{KeyEvent, KeyModifiers};
 use ratatui::Frame;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
 use crate::agent::{self, Agent};
@@ -77,6 +78,8 @@ pub struct App {
     cpu_history: Vec<f32>,
     /// System monitor for CPU usage
     sys: sysinfo::System,
+    /// Cancellation token for in-flight requests
+    cancel_token: Option<CancellationToken>,
 }
 
 impl App {
@@ -107,6 +110,7 @@ impl App {
             mouse_enabled: false,
             cpu_history: Vec::new(),
             sys,
+            cancel_token: None,
         }
     }
 
@@ -295,6 +299,13 @@ Type /help for available commands · Type /quit to exit
         }
 
         match key.code {
+            // Cancel in-flight request (Esc)
+            KeyCode::Esc => {
+                if self.is_thinking {
+                    self.cancel_request();
+                }
+            }
+
             // Quit
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.should_quit = true;
@@ -439,6 +450,10 @@ Type /help for available commands · Type /quit to exit
         self.is_thinking = true;
         self.thinking_start = std::time::Instant::now();
 
+        // Create cancellation token for this request
+        let cancel_token = CancellationToken::new();
+        self.cancel_token = Some(cancel_token.clone());
+
         debug!("Sending message to agent: {}", input);
 
         // Clone the input for the spawned task
@@ -487,13 +502,20 @@ Type /help for available commands · Type /quit to exit
                 }
             }
 
-            // Add timeout to prevent hanging (10 minutes)
-            let result = tokio::time::timeout(
-                std::time::Duration::from_secs(600),
-                agent.chat_without_history(input_clone),
-            )
-            .await
-            .unwrap_or(Err(anyhow::anyhow!("Request timed out after 10 minutes")));
+            // Add timeout and cancellation support
+            let result = tokio::select! {
+                // Normal request with timeout
+                result = tokio::time::timeout(
+                    std::time::Duration::from_secs(600),
+                    agent.chat_without_history(input_clone),
+                ) => {
+                    result.unwrap_or(Err(anyhow::anyhow!("Request timed out after 10 minutes")))
+                }
+                // Cancellation requested
+                _ = cancel_token.cancelled() => {
+                    Err(anyhow::anyhow!("Request cancelled by user"))
+                }
+            };
 
             if let Err(e) = tx.send(AppMessage::Response(result)).await {
                 tracing::error!("Failed to send response: {}", e);
@@ -512,6 +534,7 @@ Type /help for available commands · Type /quit to exit
         match msg {
             AppMessage::Response(Ok(response)) => {
                 self.is_thinking = false;
+                self.cancel_token = None;
                 debug!("Received response: {} chars", response.len());
                 if response.trim().is_empty() {
                     // Empty response - report as error
@@ -527,6 +550,7 @@ Type /help for available commands · Type /quit to exit
             }
             AppMessage::Response(Err(e)) => {
                 self.is_thinking = false;
+                self.cancel_token = None;
                 self.status = format!("✗ Error: {}", e);
                 self.agent
                     .add_assistant_message(format!("⚠ **Error:** {}", e));
@@ -843,6 +867,16 @@ Type /help for available commands · Type /quit to exit
     /// Get CPU history for sparkline rendering
     pub fn cpu_history(&self) -> &[f32] {
         &self.cpu_history
+    }
+
+    /// Cancel the current in-flight request
+    pub fn cancel_request(&mut self) {
+        if let Some(token) = self.cancel_token.take() {
+            token.cancel();
+            self.is_thinking = false;
+            self.status = "Request cancelled".to_string();
+            debug!("Request cancelled by user");
+        }
     }
 
     /// Handle mouse event for focus and scrolling
