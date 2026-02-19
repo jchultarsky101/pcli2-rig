@@ -211,15 +211,15 @@ impl std::io::Write for DualWriter {
             if !line.is_empty()
                 && let Ok(mut buffer) = self.buffer.lock()
             {
-                // Add emoji prefix based on log level (no extra space - log already has one)
+                // Add emoji prefix based on log level
                 let prefixed_line = if line.contains("ERROR") {
-                    format!("✗{}", line)
+                    format!("✗ {}", line)
                 } else if line.contains("WARN") {
-                    format!("⚠{}", line)
+                    format!("⚠ {}", line)
                 } else if line.contains("INFO") {
-                    format!("✓{}", line)
+                    format!("✓ {}", line)
                 } else if line.contains("DEBUG") {
-                    format!("•{}", line)
+                    format!("• {}", line)
                 } else {
                     line
                 };
