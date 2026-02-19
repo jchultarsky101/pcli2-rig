@@ -25,17 +25,14 @@ mod colors {
     pub const ACCENT_PURPLE: Color = Color::Rgb(180, 130, 200);
     pub const ACCENT_GREEN: Color = Color::Rgb(120, 200, 120);
     pub const ACCENT_YELLOW: Color = Color::Rgb(255, 180, 60);
-    pub const ACCENT_ORANGE: Color = Color::Rgb(255, 150, 50);
     pub const ACCENT_WARM_ORANGE: Color = Color::Rgb(255, 130, 60);
     pub const ACCENT_DARK_WARM_RED: Color = Color::Rgb(200, 80, 60);
     pub const ERROR_RED: Color = Color::Rgb(255, 100, 100);
     pub const USER_BG: Color = Color::Rgb(0, 0, 0);
     pub const ASSISTANT_BG: Color = Color::Rgb(0, 0, 0);
 
-    // Cursor colors - warm orange for high visibility
-    #[allow(dead_code)]
-    pub const CURSOR_BG: Color = Color::Rgb(255, 150, 50);
-    pub const CURSOR_FG: Color = Color::Rgb(0, 0, 0);
+    // Cursor color - warm orange for high visibility
+    pub const CURSOR: Color = Color::Rgb(255, 150, 50);
 }
 
 /// Render the main UI
@@ -270,34 +267,31 @@ fn render_input(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
     };
 
     let input_text = if app.input().is_empty() {
-        // Show placeholder with blinking block cursor at the start
-        vec![Line::from(vec![
-            Span::styled(
-                "█",
-                Style::default()
-                    .fg(colors::CURSOR_FG)
-                    .bg(colors::ACCENT_ORANGE)
-                    .add_modifier(Modifier::RAPID_BLINK),
-            ),
-            Span::styled(" Type your message...", Style::default().fg(colors::DIM)),
-        ])]
+        // Show placeholder with blinking block cursor at the start (only when focused)
+        if is_focused {
+            vec![Line::from(vec![
+                Span::styled(
+                    "█",
+                    Style::default()
+                        .fg(colors::CURSOR)
+                        .add_modifier(Modifier::RAPID_BLINK),
+                ),
+                Span::styled(" Type your message...", Style::default().fg(colors::DIM)),
+            ])]
+        } else {
+            vec![Line::from(Span::styled(" Type your message...", Style::default().fg(colors::DIM)))]
+        }
     } else {
         // Show actual input with visible blinking block cursor
         let cursor_pos = app.cursor_pos();
         let (before_cursor, after_cursor) = app.input().split_at(cursor_pos);
-        let cursor_char = if cursor_pos < app.input().len() {
-            &app.input()[cursor_pos..cursor_pos + 1]
-        } else {
-            " "
-        };
 
         vec![Line::from(vec![
             Span::raw(before_cursor),
             Span::styled(
-                cursor_char,
+                "█",
                 Style::default()
-                    .fg(colors::CURSOR_FG)
-                    .bg(colors::ACCENT_ORANGE)
+                    .fg(colors::CURSOR)
                     .add_modifier(Modifier::RAPID_BLINK),
             ),
             Span::raw(after_cursor),

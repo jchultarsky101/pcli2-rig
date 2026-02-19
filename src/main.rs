@@ -77,7 +77,8 @@ async fn main() -> Result<()> {
     let filter = if args.verbose {
         EnvFilter::new("debug")
     } else {
-        EnvFilter::new("info")
+        // Filter out noisy warnings from markdown parser about unsupported HTML
+        EnvFilter::new("info,pulldown_cmark=off")
     };
 
     // Set up file logging with custom writer that also updates shared buffer
