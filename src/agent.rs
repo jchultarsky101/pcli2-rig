@@ -136,6 +136,7 @@ impl SimpleMcpClient {
 struct McpRigTool {
     definition: rmcp::model::Tool,
     client: SimpleMcpClient,
+    #[allow(dead_code)]
     server_name: String,
 }
 
@@ -175,7 +176,16 @@ impl rig::tool::Tool for McpRigTool {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        tracing::info!("Calling MCP tool '{}' on server '{}'", self.definition.name, self.server_name);
+        // Log tool execution in a user-friendly format
+        let args_str = serde_json::to_string(&args)
+            .unwrap_or_else(|_| "{}".to_string())
+            .trim_start_matches('{')
+            .trim_end_matches('}')
+            .chars()
+            .take(100)
+            .collect::<String>();
+        tracing::info!("🔧 {}({})", self.definition.name, args_str);
+        
         self.client.call_tool(&self.definition.name, args)
             .await
             .map_err(|e| McpToolError(e.to_string()))
