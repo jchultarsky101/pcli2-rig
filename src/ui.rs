@@ -597,25 +597,39 @@ fn render_help_modal(frame: &mut Frame, app: &App, area: Rect) {
 
 /// Format message content for display
 fn format_msg_content(content: &str, max_width: usize) -> String {
-    // Simple word wrapping
+    // Preserve original line breaks while word-wapping long lines
     let mut result = String::new();
-    let mut current_line = String::new();
-
-    for word in content.split_whitespace() {
-        if current_line.len() + word.len() + 1 > max_width {
-            result.push_str(&current_line);
+    
+    for line in content.lines() {
+        if line.is_empty() {
             result.push('\n');
-            current_line.clear();
+            continue;
         }
+        
+        // Word wrap this line if it's too long
+        let mut current_line = String::new();
+        for word in line.split_whitespace() {
+            if current_line.len() + word.len() + 1 > max_width {
+                result.push_str(&current_line);
+                result.push('\n');
+                current_line.clear();
+            }
+            if !current_line.is_empty() {
+                current_line.push(' ');
+            }
+            current_line.push_str(word);
+        }
+        
         if !current_line.is_empty() {
-            current_line.push(' ');
+            result.push_str(&current_line);
         }
-        current_line.push_str(word);
+        result.push('\n');
     }
-
-    if !current_line.is_empty() {
-        result.push_str(&current_line);
+    
+    // Remove trailing newline if present
+    if result.ends_with('\n') {
+        result.pop();
     }
-
+    
     result
 }

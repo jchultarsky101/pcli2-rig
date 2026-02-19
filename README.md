@@ -4,7 +4,7 @@ A beautiful TUI-based local AI agent powered by [Rig](https://github.com/0xPlayg
 
 ## Features
 
-- 🎨 **Beautiful Dark TUI** - Inspired by Qwen Code with ASCII banner and emoji-rich interface
+- 🎨 **Beautiful Warm TUI** - Black background with warm orange/golden gradient banner and emoji-rich interface
 - 🤖 **Local AI** - Runs entirely on your laptop using Ollama
 - 🛠️ **Tool Support** - Built-in tools for file operations, command execution, and code search
 - 🔒 **Privacy First** - All inference happens locally, no data leaves your machine
@@ -12,18 +12,22 @@ A beautiful TUI-based local AI agent powered by [Rig](https://github.com/0xPlayg
 - 🎯 **YOLO Mode** - Skip tool confirmation with `--yolo` flag for faster workflows
 - 🖱️ **Mouse Support** - Click to focus panes, scroll wheel navigation (toggle with Ctrl+M)
 - 📋 **Text Selection** - Copy/paste from chat history (mouse disabled by default)
-- 📜 **Help Modal** - Press `/help` for detailed command reference
+- 📜 **Help Modal** - Press `/help` for detailed command reference with platform-specific config path
 - 🔌 **MCP Support** - Model Context Protocol server integration
+- 📊 **CPU Monitoring** - Real-time CPU usage sparkline during LLM requests
+- ⌨️ **Horizontal Scroll** - Scroll long log lines with ←/→ arrow keys
+- 🚫 **Request Cancellation** - Press Esc to cancel in-flight LLM requests
 
 ## Screenshot
 
 ```
-  _____   _____ _      _____ ___    _____  _____ _____ 
- |  __ \ / ____| |    |_   _|__ \  |  __ \|_   _/ ____|
- | |__) | |    | |      | |    ) | | |__) | | || |  __ 
- |  ___/| |    | |      | |   / /  |  _  /  | || | |_ |
- | |    | |____| |____ _| |_ / /_  | | \ \ _| || |__| |
- |_|     \_____|______|_____|____| |_|  \_\_____\_____|
+
+██████╗  ██████╗██╗     ██╗██████╗     ██████╗ ██╗ ██████╗ 
+██╔══██╗██╔════╝██║     ██║╚════██╗    ██╔══██╗██║██╔════╝ 
+██████╔╝██║     ██║     ██║ █████╔╝    ██████╔╝██║██║  ███╗
+██╔═══╝ ██║     ██║     ██║██╔═══╝     ██╔══██╗██║██║   ██║
+██║     ╚██████╗███████╗██║███████╗    ██║  ██║██║╚██████╔╝
+╚═╝      ╚═════╝╚══════╝╚═╝╚══════╝    ╚═╝  ╚═╝╚═╝ ╚═════╝
 
 ┌─ Chat History [5] ─────────────────────────────────┐
 │ 👤 You: Hello, can you help me with my code?       │
@@ -39,11 +43,11 @@ A beautiful TUI-based local AI agent powered by [Rig](https://github.com/0xPlayg
 
 ┌─ Logs ─────────────────────────────────────────────┐
 │ ✓ INFO Starting PCLI2-RIG with model: ...          │
-│ ⋯ DEBUG Sending request to Ollama model: ...       │
+│ • DEBUG Sending request to Ollama model: ...       │
 │ ✓ Ready                                            │
 └─────────────────────────────────────────────────────┘
 
- ✓ Ready │ Model: qwen2.5-coder:3b 
+ ✓ Ready │ Model: qwen2.5-coder:3b │ CPU: ▁▃▅▇█ (45%)
 ```
 
 ## Installation
@@ -233,7 +237,7 @@ export OLLAMA_HOST=http://localhost:11434
 | `Ctrl+M` | Toggle mouse mode (enable/disable text selection) |
 | `Tab` | Switch focus between panes |
 | `Shift+Tab` | Switch focus backwards |
-| `Esc` | Close modal dialogs |
+| `Esc` | Close modal dialogs **or** cancel in-flight LLM request |
 
 #### Input Pane (when focused)
 
@@ -251,6 +255,7 @@ export OLLAMA_HOST=http://localhost:11434
 |-----|--------|
 | `↑/↓` | Scroll 1 line |
 | `PageUp/PageDown` | Scroll 5 lines |
+| `←/→` | Horizontal scroll (logs pane only) |
 
 #### Mouse Controls
 
@@ -331,8 +336,14 @@ Use `--yolo` mode to skip confirmation for faster workflows.
 
 ### Config File
 
-Create `~/.config/pcli2-rig/config.toml`:
+The config file is located at a platform-specific path:
+- **Linux**: `~/.config/pcli2-rig/config.toml`
+- **macOS**: `~/Library/Application Support/pcli2-rig/config.toml`
+- **Windows**: `%APPDATA%\pcli2-rig\config.toml`
 
+The exact path is shown in the `/help` modal and logged at startup.
+
+Example configuration:
 ```toml
 model = "qwen2.5-coder:3b"
 host = "http://localhost:11434"
@@ -349,6 +360,11 @@ name = "github"
 url = "http://localhost:3001"
 token = "ghp_..."  # Optional auth
 enabled = false
+```
+
+When the config file is loaded, an INFO log message shows the exact path:
+```
+✓ INFO Loaded config from /home/user/.config/pcli2-rig/config.toml
 ```
 
 ### MCP Commands
@@ -401,6 +417,18 @@ ollama pull qwen2.5-coder:3b
 ### TUI rendering issues
 
 Try resizing your terminal or check that your terminal supports UTF-8.
+
+### Long log lines are cut off
+
+Use ←/→ arrow keys to scroll horizontally when the Logs pane is focused.
+
+### Want to cancel a slow LLM request?
+
+Press `Esc` while waiting for a response to cancel the request.
+
+### CPU sparkline not showing?
+
+The CPU usage sparkline only appears in the status bar while waiting for an LLM response.
 
 ## Commands
 

@@ -86,7 +86,7 @@ impl Config {
             if config_path.exists() {
                 if let Ok(content) = fs::read_to_string(&config_path) {
                     if let Ok(config) = toml::from_str::<Config>(&content) {
-                        tracing::debug!("Loaded config from {:?}", config_path);
+                        tracing::info!("Loaded config from {}", config_path.display());
                         tracing::debug!("Loaded {} MCP servers from config", config.mcp_servers.len());
                         for server in &config.mcp_servers {
                             tracing::debug!("  MCP server: {} -> {}", server.name, server.url);

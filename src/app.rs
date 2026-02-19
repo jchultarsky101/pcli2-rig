@@ -982,8 +982,12 @@ Type /help for available commands · Type /quit to exit
     }
 
     /// Get detailed help text
-    pub fn get_help_text() -> &'static str {
-        r#"PCLI2-RIG - Local AI Agent
+    pub fn get_help_text() -> String {
+        let config_path = crate::config::Config::config_file_path()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| "~/.config/pcli2-rig/config.toml".to_string());
+        
+        format!(r#"PCLI2-RIG - Local AI Agent
 ═══════════════════════════════════════════════════════════
 
 A beautiful TUI-based AI coding assistant powered by Ollama.
@@ -1059,11 +1063,12 @@ Logs              - Real-time application logs
 
 Status            - Current application status
                   - Animated spinner when processing
+                  - CPU sparkline during LLM requests
 
 CONFIGURATION
 ───────────────────────────────────────────────────────────
 
-Config file: ~/.config/pcli2-rig/config.toml
+Config file: {}
 
 Example configuration:
   model = "qwen2.5-coder:3b"
@@ -1080,6 +1085,6 @@ LOGS
 
 Application logs: ~/.local/state/pcli2-rig/pcli2-rig.log
 
-Press Esc, Enter, or 'q' to close this help."#
+Press Esc, Enter, or 'q' to close this help."#, config_path)
     }
 }
