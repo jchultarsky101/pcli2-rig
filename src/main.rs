@@ -30,8 +30,8 @@ mod ui;
 #[command(propagate_version = true)]
 struct Args {
     /// Ollama model to use (e.g., "qwen2.5-coder:3b")
-    #[arg(short, long, env = "OLLAMA_MODEL", default_value = "qwen2.5-coder:3b")]
-    model: String,
+    #[arg(short, long, env = "OLLAMA_MODEL")]
+    model: Option<String>,
 
     /// Ollama server URL
     #[arg(
@@ -109,17 +109,21 @@ async fn main() -> Result<()> {
         tracing_subscriber::registry().with(filter).init();
     }
 
-    tracing::info!("Starting PCLI2-RIG with model: {}", args.model);
+    tracing::info!("Starting PCLI2-RIG with model: {}", args.model.as_deref().unwrap_or("config default"));
 
     // Load configuration from file (if exists)
     let mut config = Config::load();
     tracing::info!("Config loaded with model: {}", config.model);
 
-    // Override with CLI arguments
-    config.model = args.model.clone();
+    // Override with CLI arguments only if explicitly provided
+    if let Some(model) = args.model {
+        config.model = model;
+        tracing::info!("After CLI override, model: {}", config.model);
+    } else {
+        tracing::info!("Using model from config file: {}", config.model);
+    }
     config.host = args.host.clone();
     config.yolo = args.yolo;
-    tracing::info!("After CLI override, model: {}", config.model);
 
     // Parse MCP configuration
     let mut mcp_servers = Vec::new();
