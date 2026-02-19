@@ -227,6 +227,7 @@ impl Agent {
     /// Create a new agent
     pub fn new(config: &Config) -> Result<Self> {
         info!("Creating Ollama client with host: {}", config.host);
+        info!("Agent using model: {}", config.model);
 
         // Create Ollama client
         let client = ollama::Client::new(Nothing)

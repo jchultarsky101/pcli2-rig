@@ -112,11 +112,13 @@ async fn main() -> Result<()> {
 
     // Load configuration from file (if exists)
     let mut config = Config::load();
+    tracing::info!("Config loaded with model: {}", config.model);
 
     // Override with CLI arguments
     config.model = args.model.clone();
     config.host = args.host.clone();
     config.yolo = args.yolo;
+    tracing::info!("After CLI override, model: {}", config.model);
 
     // Parse MCP configuration
     let mut mcp_servers = Vec::new();
