@@ -9,7 +9,7 @@ use crossterm::{
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io;
 use tokio::sync::mpsc;
-use tracing::{debug, info};
+use tracing::debug;
 
 /// Terminal event stream
 pub type EventStream = mpsc::UnboundedReceiver<Result<Event>>;
@@ -46,7 +46,7 @@ impl Tui {
 
     /// Enter alternate screen and enable raw mode
     pub fn enter(&mut self) -> Result<()> {
-        info!("Entering TUI mode");
+        debug!("Entering TUI mode");
 
         enable_raw_mode().context("Failed to enable raw mode")?;
         execute!(io::stdout(), EnterAlternateScreen).context("Failed to enter alternate screen")?;
@@ -59,7 +59,7 @@ impl Tui {
 
     /// Leave alternate screen and disable raw mode
     pub fn exit(&mut self) -> Result<()> {
-        info!("Exiting TUI mode");
+        debug!("Exiting TUI mode");
 
         // Show cursor
         execute!(io::stdout(), crossterm::cursor::Show)?;

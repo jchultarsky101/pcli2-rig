@@ -8,7 +8,7 @@ use rig::{
     tool::server::ToolServer,
 };
 use serde_json::json;
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::config::{Config, McpServerConfig};
 
@@ -226,8 +226,7 @@ pub struct Agent {
 impl Agent {
     /// Create a new agent
     pub fn new(config: &Config) -> Result<Self> {
-        info!("Creating Ollama client with host: {}", config.host);
-        info!("Agent using model: {}", config.model);
+        debug!("Creating Ollama client with host: {}", config.host);
 
         // Create Ollama client
         let client = ollama::Client::new(Nothing)
@@ -245,7 +244,7 @@ impl Agent {
 
     /// Connect to MCP servers and discover tools
     pub async fn connect_mcp_servers(&mut self, servers: &[McpServerConfig]) {
-        info!("Connecting to {} MCP servers", servers.len());
+        debug!("Connecting to {} MCP servers", servers.len());
 
         let mut tool_server = ToolServer::new();
 
@@ -254,7 +253,7 @@ impl Agent {
                 continue;
             }
 
-            info!(
+            debug!(
                 "Connecting to MCP server: {} at {}",
                 server.name, server.url
             );
@@ -262,11 +261,11 @@ impl Agent {
             // Try to connect to the MCP server using simple HTTP client
             match self.connect_mcp_server(&server.url, &server.name).await {
                 Ok((client, tools)) => {
-                    info!("Connected to MCP server '{}': {} tools", server.name, tools.len());
+                    debug!("Connected to MCP server '{}': {} tools", server.name, tools.len());
 
                     // Create custom Rig tools for each MCP tool
                     for tool in &tools {
-                        info!("Registering MCP tool: {} - {}", tool.name, tool.description.as_ref().unwrap_or(&"".into()));
+                        debug!("Registering MCP tool: {} - {}", tool.name, tool.description.as_ref().unwrap_or(&"".into()));
                         let mcp_tool = McpRigTool::new(
                             tool.clone(),
                             client.clone(),
@@ -299,7 +298,7 @@ impl Agent {
             if !tool_defs.is_empty() {
                 let tool_names: Vec<&str> = tool_defs.iter().map(|t| t.name.as_str()).collect();
                 let tools_str = tool_names.join(", ");
-                tracing::info!("Registered MCP tools: {}", tools_str);
+                tracing::debug!("Registered MCP tools: {}", tools_str);
                 self.preamble = format!(
                     r#"You are PCLI2-RIG, a helpful AI coding assistant running in a terminal TUI.
 

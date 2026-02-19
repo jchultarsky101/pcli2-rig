@@ -29,8 +29,8 @@ mod colors {
     pub const ACCENT_WARM_ORANGE: Color = Color::Rgb(255, 130, 60);
     pub const ACCENT_DARK_WARM_RED: Color = Color::Rgb(200, 80, 60);
     pub const ERROR_RED: Color = Color::Rgb(255, 100, 100);
-    pub const USER_BG: Color = Color::Rgb(18, 18, 18);
-    pub const ASSISTANT_BG: Color = Color::Rgb(12, 12, 12);
+    pub const USER_BG: Color = Color::Rgb(0, 0, 0);
+    pub const ASSISTANT_BG: Color = Color::Rgb(0, 0, 0);
 
     // Cursor colors - warm orange for high visibility
     #[allow(dead_code)]

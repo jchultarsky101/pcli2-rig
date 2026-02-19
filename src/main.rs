@@ -109,21 +109,19 @@ async fn main() -> Result<()> {
         tracing_subscriber::registry().with(filter).init();
     }
 
-    tracing::info!("Starting PCLI2-RIG with model: {}", args.model.as_deref().unwrap_or("config default"));
+    tracing::debug!("Starting PCLI2-RIG with model: {}", args.model.as_deref().unwrap_or("config default"));
 
     // Load configuration from file (if exists)
     let mut config = Config::load();
-    tracing::info!("Config loaded with model: {}", config.model);
 
     // Override with CLI arguments only if explicitly provided
     if let Some(model) = args.model {
         config.model = model;
-        tracing::info!("After CLI override, model: {}", config.model);
-    } else {
-        tracing::info!("Using model from config file: {}", config.model);
     }
     config.host = args.host.clone();
     config.yolo = args.yolo;
+
+    tracing::info!("Using model: {}", config.model);
 
     // Parse MCP configuration
     let mut mcp_servers = Vec::new();
@@ -144,7 +142,7 @@ async fn main() -> Result<()> {
         // Parse pcli2-mcp JSON format
         if let Ok(mcp_config) = parse_mcp_config(&json_content) {
             mcp_servers.extend(mcp_config);
-            tracing::info!("Loaded {} MCP servers from config", mcp_servers.len());
+            tracing::debug!("Loaded {} MCP servers from config", mcp_servers.len());
         }
     }
 
@@ -265,7 +263,7 @@ fn parse_mcp_config(json: &str) -> Result<Vec<McpServerConfig>> {
             }
 
             if let Some(server_url) = url {
-                tracing::info!("Parsed MCP server: {} -> {}", name, server_url);
+                tracing::debug!("Parsed MCP server: {} -> {}", name, server_url);
                 servers.push(McpServerConfig {
                     name: name.clone(),
                     url: server_url,

@@ -86,17 +86,17 @@ impl Config {
             if config_path.exists() {
                 if let Ok(content) = fs::read_to_string(&config_path) {
                     if let Ok(config) = toml::from_str::<Config>(&content) {
-                        tracing::info!("Loaded config from {:?}", config_path);
-                        tracing::info!("Loaded {} MCP servers from config", config.mcp_servers.len());
+                        tracing::debug!("Loaded config from {:?}", config_path);
+                        tracing::debug!("Loaded {} MCP servers from config", config.mcp_servers.len());
                         for server in &config.mcp_servers {
-                            tracing::info!("  MCP server: {} -> {}", server.name, server.url);
+                            tracing::debug!("  MCP server: {} -> {}", server.name, server.url);
                         }
                         return config;
                     }
                 }
             }
         }
-        tracing::info!("Using default configuration");
+        tracing::debug!("Using default configuration");
         Config::default()
     }
 }

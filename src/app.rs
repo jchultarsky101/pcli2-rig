@@ -5,7 +5,7 @@ use crossterm::event::{KeyEvent, KeyModifiers};
 use ratatui::Frame;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::agent::{self, Agent};
 use crate::config::Config;
@@ -101,7 +101,7 @@ impl App {
 
     /// Run the application main loop
     pub async fn run(&mut self, tui: &mut Tui) -> Result<()> {
-        info!("Starting application main loop");
+        debug!("Starting application main loop");
 
         // Create channel for async responses
         let (tx, mut rx) = mpsc::channel::<AppMessage>(32);
@@ -117,7 +117,7 @@ impl App {
             self.agent.connect_mcp_servers(&mcp_servers).await;
             let connected_count = self.agent.mcp_server_count();
             self.status = format!("Ready | {} MCP server(s) connected", connected_count);
-            info!("Connected to {} MCP servers", connected_count);
+            debug!("Connected to {} MCP servers", connected_count);
         }
 
         // Timer for spinner animation (500ms interval)
@@ -494,7 +494,7 @@ Type /help for available commands · Type /quit to exit
         match msg {
             AppMessage::Response(Ok(response)) => {
                 self.is_thinking = false;
-                tracing::info!("handle_response: Ok response, {} chars", response.len());
+                debug!("Received response: {} chars", response.len());
                 if response.trim().is_empty() {
                     // Empty response - report as error
                     self.status = "⚠ Empty response from model".to_string();
@@ -502,12 +502,8 @@ Type /help for available commands · Type /quit to exit
                     tracing::warn!("Received empty response from model");
                 } else {
                     self.status = "✓ Ready".to_string();
-                    tracing::info!("handle_response: adding assistant message to history");
                     self.agent.add_assistant_message(response.clone());
-                    tracing::info!(
-                        "handle_response: history now has {} messages",
-                        self.agent.chat_history().len()
-                    );
+                    debug!("Chat history now has {} messages", self.agent.chat_history().len());
                 }
                 debug!("Agent response: {}", response);
             }
