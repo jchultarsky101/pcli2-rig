@@ -423,30 +423,56 @@ Type /help for available commands · Type /quit to exit
 
         debug!("Sending message to agent: {}", input);
 
-        // Spawn the async request
-        let mut agent = Agent::new(&Config::default()).expect("Failed to create agent");
-        // Copy the current chat history
+        // Clone the input for the spawned task
+        let input_clone = input.clone();
+        let tx = tx.clone();
+
+        // Clone agent state for the spawned task
+        let model_name = self.agent.model_name().to_string();
+        let preamble = self.agent.preamble().to_string();
+        let tool_server_handle = self.agent.tool_server_handle().cloned();
+        let mut chat_history = Vec::new();
         for msg in self.agent.chat_history() {
-            match msg.role {
-                crate::agent::MessageRole::User => {
-                    agent.add_user_message(msg.content.clone());
-                }
-                crate::agent::MessageRole::Assistant => {
-                    agent.add_assistant_message(msg.content.clone());
-                }
-                crate::agent::MessageRole::ToolResult => {
-                    agent.add_tool_result(msg.content.clone());
-                }
-                _ => {}
-            }
+            chat_history.push((msg.role.clone(), msg.content.clone()));
         }
 
-        let tx = tx.clone();
         tokio::spawn(async move {
+            // Create agent with correct model
+            use crate::config::Config;
+            let config = Config {
+                model: model_name,
+                host: "http://localhost:11434".to_string(),
+                yolo: false,
+                mcp_servers: vec![],
+            };
+            let mut agent = Agent::new(&config).expect("Failed to create agent");
+
+            // Restore agent state
+            agent.set_preamble(preamble);
+            if let Some(handle) = tool_server_handle {
+                agent.set_tool_server_handle(handle);
+            }
+
+            // Restore chat history
+            for (role, content) in chat_history {
+                match role {
+                    crate::agent::MessageRole::User => {
+                        agent.add_user_message(content);
+                    }
+                    crate::agent::MessageRole::Assistant => {
+                        agent.add_assistant_message(content);
+                    }
+                    crate::agent::MessageRole::ToolResult => {
+                        agent.add_tool_result(content);
+                    }
+                    _ => {}
+                }
+            }
+
             // Add timeout to prevent hanging (10 minutes)
             let result = tokio::time::timeout(
                 std::time::Duration::from_secs(600),
-                agent.chat_without_history(input),
+                agent.chat_without_history(input_clone),
             )
             .await
             .unwrap_or(Err(anyhow::anyhow!("Request timed out after 10 minutes")));

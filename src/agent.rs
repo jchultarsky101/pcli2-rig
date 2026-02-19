@@ -416,6 +416,22 @@ You are running on the user's local machine via Ollama."#
         self.tool_server_handle.as_ref()
     }
 
+    /// Get preamble
+    #[allow(dead_code)]
+    pub fn preamble(&self) -> &str {
+        &self.preamble
+    }
+
+    /// Set tool server handle (for cloning agent state)
+    pub fn set_tool_server_handle(&mut self, handle: rig::tool::server::ToolServerHandle) {
+        self.tool_server_handle = Some(handle);
+    }
+
+    /// Set preamble (for cloning agent state)
+    pub fn set_preamble(&mut self, preamble: String) {
+        self.preamble = preamble;
+    }
+
     /// Send a message and get a response (without adding user message to history)
     pub async fn chat_without_history(&mut self, _user_message: String) -> Result<String> {
         // Send request and get response
@@ -487,6 +503,7 @@ You are running on the user's local machine via Ollama."#
         // Build the agent with or without tools
         let response = if let Some(tool_handle) = &self.tool_server_handle {
             debug!("Attaching tool server handle with {} MCP servers connected", self.mcp_connected.len());
+            debug!("Creating agent with model: {}", self.model_name);
             let agent = self
                 .client
                 .agent(&self.model_name)
@@ -494,14 +511,17 @@ You are running on the user's local machine via Ollama."#
                 .tool_server_handle(tool_handle.clone())
                 .build();
 
+            debug!("Sending prompt to agent with model: {}", self.model_name);
             agent.prompt(prompt_text).await
         } else {
+            debug!("Creating agent (no tools) with model: {}", self.model_name);
             let agent = self
                 .client
                 .agent(&self.model_name)
                 .preamble(&self.preamble)
                 .build();
 
+            debug!("Sending prompt to agent with model: {}", self.model_name);
             agent.prompt(prompt_text).await
         }.map_err(|e| {
             anyhow::anyhow!(
