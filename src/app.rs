@@ -16,6 +16,9 @@ use crate::ui;
 pub static LOG_BUFFER: once_cell::sync::Lazy<Arc<Mutex<Vec<String>>>> =
     once_cell::sync::Lazy::new(|| Arc::new(Mutex::new(Vec::new())));
 
+/// Number of CPU samples to keep for sparkline
+const CPU_HISTORY_SIZE: usize = 20;
+
 /// Messages for the app loop
 #[derive(Debug)]
 pub enum AppMessage {
@@ -70,12 +73,18 @@ pub struct App {
     help_scroll_offset: usize,
     /// Whether mouse capture is enabled (for click/scroll vs text selection)
     mouse_enabled: bool,
+    /// CPU usage history for sparkline (percentage values 0-100)
+    cpu_history: Vec<f32>,
+    /// System monitor for CPU usage
+    sys: sysinfo::System,
 }
 
 impl App {
     /// Create a new application
     pub fn new(config: Config) -> Self {
         let agent = Agent::new(&config).expect("Failed to create agent");
+        let mut sys = sysinfo::System::new();
+        sys.refresh_cpu_usage();
 
         Self {
             agent,
@@ -96,6 +105,8 @@ impl App {
             show_help: false,
             help_scroll_offset: 0,
             mouse_enabled: false,
+            cpu_history: Vec::new(),
+            sys,
         }
     }
 
@@ -126,6 +137,9 @@ impl App {
         // Timer for syncing logs (200ms interval)
         let mut log_timer = tokio::time::interval(std::time::Duration::from_millis(200));
 
+        // Timer for CPU sampling (1 second interval)
+        let mut cpu_timer = tokio::time::interval(std::time::Duration::from_secs(1));
+
         // Main event loop
         loop {
             // Draw the UI
@@ -153,6 +167,10 @@ impl App {
                 // Timer for syncing logs from shared buffer
                 _ = log_timer.tick() => {
                     self.sync_logs();
+                }
+                // Timer for CPU sampling
+                _ = cpu_timer.tick() => {
+                    self.sample_cpu();
                 }
             }
 
@@ -807,6 +825,24 @@ Type /help for available commands · Type /quit to exit
                 self.logs.drain(0..excess);
             }
         }
+    }
+
+    /// Sample CPU usage and add to history
+    pub fn sample_cpu(&mut self) {
+        self.sys.refresh_cpu_usage();
+        let cpu_usage = self.sys.global_cpu_usage();
+        
+        self.cpu_history.push(cpu_usage);
+        
+        // Keep only the last N samples
+        if self.cpu_history.len() > CPU_HISTORY_SIZE {
+            self.cpu_history.remove(0);
+        }
+    }
+
+    /// Get CPU history for sparkline rendering
+    pub fn cpu_history(&self) -> &[f32] {
+        &self.cpu_history
     }
 
     /// Handle mouse event for focus and scrolling

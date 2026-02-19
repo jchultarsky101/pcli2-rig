@@ -379,7 +379,7 @@ fn render_logs(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
 /// Render the status bar with animated thinking indicator
 fn render_status(frame: &mut Frame, app: &App, area: Rect) {
     // Create fixed-width spinner for thinking status (same as chat history)
-    let status_text = if app.is_thinking() {
+    let mut status_text = if app.is_thinking() {
         let elapsed = app.thinking_start().elapsed().as_secs();
         let spinner = match elapsed % 4 {
             0 => "⠋",
@@ -392,6 +392,17 @@ fn render_status(frame: &mut Frame, app: &App, area: Rect) {
     } else {
         format!(" {} ", app.status())
     };
+
+    // Add CPU sparkline when thinking
+    if app.is_thinking() {
+        let cpu_history = app.cpu_history();
+        if !cpu_history.is_empty() {
+            let cpu_history_f64: Vec<f64> = cpu_history.iter().map(|&x| x as f64).collect();
+            let sparkline = gilt::sparkline::Sparkline::new(&cpu_history_f64);
+            let cpu_avg = cpu_history.iter().sum::<f32>() / cpu_history.len() as f32;
+            status_text = format!("{}  CPU: {} ({:.0}%)", status_text, sparkline, cpu_avg);
+        }
+    }
 
     let status_style = if app.status().contains("Error") {
         Style::default().fg(colors::ERROR_RED)
