@@ -379,11 +379,17 @@ Type /help for available commands · Type /quit to exit
             KeyCode::Home => {
                 if self.focus_pane == 1 {
                     self.cursor_pos = 0;
+                } else if self.focus_pane == 2 {
+                    // Logs: scroll to beginning of line
+                    self.log_hscroll_offset = 0;
                 }
             }
             KeyCode::End => {
                 if self.focus_pane == 1 {
                     self.cursor_pos = self.input.len();
+                } else if self.focus_pane == 2 {
+                    // Logs: scroll to end of line (max value)
+                    self.log_hscroll_offset = usize::MAX;
                 }
             }
 
