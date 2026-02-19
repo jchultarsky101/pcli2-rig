@@ -40,6 +40,7 @@ tui-markdown = "0.3"
 unicode-width = "0.2"
 dirs = "6"
 once_cell = "1.19"
+ansi-to-tui = "8.0"
 
 [profile.release]
 lto = true

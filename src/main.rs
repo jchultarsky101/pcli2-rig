@@ -99,7 +99,7 @@ async fn main() -> Result<()> {
             .with_file(false)
             .with_line_number(false)
             .without_time()
-            .with_ansi(false);  // Disable ANSI colors for file output
+            .with_ansi(true);  // Enable ANSI colors for TUI parsing
 
         tracing_subscriber::registry()
             .with(file_layer)

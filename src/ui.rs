@@ -8,6 +8,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, Paragraph},
 };
 use tui_markdown::from_str;
+use ansi_to_tui::IntoText;
 
 use crate::app::App;
 
@@ -336,30 +337,11 @@ fn render_logs(frame: &mut Frame, app: &App, area: Rect, is_focused: bool) {
         .iter()
         .skip(scroll_start)
         .take(visible_lines)
-        .map(|line| {
-            // Add emoji based on log content
-            let (emoji, color) = if line.contains("ERROR")
-                || line.contains("Error")
-                || line.contains("failed")
-            {
-                ("✗ ", colors::ERROR_RED)
-            } else if line.contains("WARN") || line.contains("Empty") {
-                ("⚠ ", colors::ACCENT_YELLOW)
-            } else if line.contains("INFO") || line.contains("Ready") || line.contains("success") {
-                ("✓ ", colors::ACCENT_GREEN)
-            } else if line.contains("DEBUG")
-                || line.contains("Sending")
-                || line.contains("Received")
-            {
-                ("⋯ ", colors::ACCENT_CYAN)
-            } else {
-                ("• ", colors::DIM)
-            };
-
-            Line::from(vec![
-                Span::styled(emoji, Style::default().fg(color)),
-                Span::styled(line, Style::default().fg(colors::FOREGROUND)),
-            ])
+        .flat_map(|line| {
+            // Parse ANSI color codes and convert to ratatui Lines
+            line.into_text()
+                .map(|text| text.lines.into_iter())
+                .unwrap_or_else(|_| vec![Line::from(line.as_str())].into_iter())
         })
         .collect();
 
