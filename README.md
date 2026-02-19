@@ -15,8 +15,9 @@ A beautiful TUI-based local AI agent powered by [Rig](https://github.com/0xPlayg
 - 📜 **Help Modal** - Press `/help` for detailed command reference with platform-specific config path
 - 🔌 **MCP Support** - Model Context Protocol server integration
 - 📊 **CPU Monitoring** - Real-time CPU usage sparkline during LLM requests
-- ⌨️ **Horizontal Scroll** - Scroll long log lines with ←/→ arrow keys
+- ⌨️ **Horizontal Scroll** - Scroll long log lines with ←/→ arrow keys and Home/End
 - 🚫 **Request Cancellation** - Press Esc to cancel in-flight LLM requests
+- 📜 **Command History** - Bash-style Up/Down navigation for previous inputs
 
 ## Screenshot
 
@@ -244,7 +245,7 @@ export OLLAMA_HOST=http://localhost:11434
 | Key | Action |
 |-----|--------|
 | `Enter` | Send message |
-| `↑/↓` | Move cursor in input |
+| `↑/↓` | Previous/next command in history (bash-style) |
 | `Home/End` | Jump to start/end of input |
 | `Backspace` | Delete character before cursor |
 | `Delete` | Delete character at cursor |
@@ -256,6 +257,7 @@ export OLLAMA_HOST=http://localhost:11434
 | `↑/↓` | Scroll 1 line |
 | `PageUp/PageDown` | Scroll 5 lines |
 | `←/→` | Horizontal scroll (logs pane only) |
+| `Home/End` | Jump to start/end of line (logs pane only) |
 
 #### Mouse Controls
 
