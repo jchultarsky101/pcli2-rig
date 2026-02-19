@@ -1099,8 +1099,16 @@ COMMANDS
 MOUSE CONTROLS
 ───────────────────────────────────────────────────────────
 
-Left Click       Focus on clicked pane
-Scroll Wheel     Scroll in focused pane (3 lines)
+Press Ctrl+M to toggle mouse mode:
+
+  Mouse Disabled (default):
+    - Select and copy text from terminal
+    - Mouse clicks pass through to terminal
+
+  Mouse Enabled:
+    Left Click       Focus on clicked pane
+    Scroll Wheel     Scroll in focused pane (3 lines)
+    Shift+Wheel      Horizontal scroll (logs pane)
 
 KEYBOARD SHORTCUTS
 ───────────────────────────────────────────────────────────
