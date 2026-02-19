@@ -1,6 +1,6 @@
 [package]
 name = "pcli2-rig"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "A beautiful TUI-based local AI agent powered by Rig and Ollama"
 authors = ["Physna"]

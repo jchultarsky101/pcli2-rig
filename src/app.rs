@@ -88,6 +88,8 @@ pub struct App {
     history_index: usize,
     /// Temporary storage for original input when browsing history
     history_original: String,
+    /// Horizontal scroll offset for input (when text exceeds width)
+    input_hscroll_offset: usize,
 }
 
 impl App {
@@ -123,6 +125,7 @@ impl App {
             input_history: Vec::new(),
             history_index: 0,
             history_original: String::new(),
+            input_hscroll_offset: 0,
         }
     }
 
@@ -490,7 +493,8 @@ Type /help for available commands · Type /quit to exit
         let cancel_token = CancellationToken::new();
         self.cancel_token = Some(cancel_token.clone());
 
-        debug!("Sending message to agent: {}", input);
+        tracing::info!("Message submitted to LLM");
+        debug!("Message submitted to LLM");
 
         // Clone the input for the spawned task
         let input_clone = input.clone();
@@ -587,9 +591,22 @@ Type /help for available commands · Type /quit to exit
             AppMessage::Response(Err(e)) => {
                 self.is_thinking = false;
                 self.cancel_token = None;
-                self.status = format!("✗ Error: {}", e);
+                
+                // Clean up repetitive error messages
+                let error_msg = e.to_string();
+                let clean_error = if error_msg.contains("Tool call error:") {
+                    // Extract just the essential error
+                    error_msg.split("Tool call error:").last().unwrap_or(&error_msg).trim().to_string()
+                } else if error_msg.contains("ToolCallError:") {
+                    // Remove repetitive ToolCallError prefixes
+                    error_msg.split("ToolCallError:").last().unwrap_or(&error_msg).trim().to_string()
+                } else {
+                    error_msg
+                };
+                
+                self.status = format!("✗ Error: {}", clean_error);
                 self.agent
-                    .add_assistant_message(format!("⚠ **Error:** {}", e));
+                    .add_assistant_message(format!("⚠ **Error:** {}", clean_error));
                 tracing::error!("Received error: {}", e);
             }
         }
@@ -801,8 +818,18 @@ Type /help for available commands · Type /quit to exit
                     }
                 }
                 Err(e) => {
-                    self.status = format!("Tool execution failed: {}", e);
-                    self.agent.add_tool_result(format!("Error: {}", e));
+                    // Clean up repetitive error messages
+                    let error_msg = e.to_string();
+                    let clean_error = if error_msg.contains("Tool call error:") {
+                        error_msg.split("Tool call error:").last().unwrap_or(&error_msg).trim().to_string()
+                    } else if error_msg.contains("ToolCallError:") {
+                        error_msg.split("ToolCallError:").last().unwrap_or(&error_msg).trim().to_string()
+                    } else {
+                        error_msg
+                    };
+                    
+                    self.status = format!("Tool execution failed: {}", clean_error);
+                    self.agent.add_tool_result(format!("Error: {}", clean_error));
                 }
             }
         }
@@ -843,6 +870,11 @@ Type /help for available commands · Type /quit to exit
     /// Get cursor position
     pub fn cursor_pos(&self) -> usize {
         self.cursor_pos
+    }
+
+    /// Get input horizontal scroll offset
+    pub fn input_hscroll_offset(&self) -> usize {
+        self.input_hscroll_offset
     }
 
     /// Get logs
@@ -1067,8 +1099,16 @@ COMMANDS
 MOUSE CONTROLS
 ───────────────────────────────────────────────────────────
 
-Left Click       Focus on clicked pane
-Scroll Wheel     Scroll in focused pane (3 lines)
+Press Ctrl+M to toggle mouse mode:
+
+  Mouse Disabled (default):
+    - Select and copy text from terminal
+    - Mouse clicks pass through to terminal
+
+  Mouse Enabled:
+    Left Click       Focus on clicked pane
+    Scroll Wheel     Scroll in focused pane (3 lines)
+    Shift+Wheel      Horizontal scroll (logs pane)
 
 KEYBOARD SHORTCUTS
 ───────────────────────────────────────────────────────────

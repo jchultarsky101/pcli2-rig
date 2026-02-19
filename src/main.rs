@@ -211,15 +211,23 @@ impl std::io::Write for DualWriter {
             if !line.is_empty()
                 && let Ok(mut buffer) = self.buffer.lock()
             {
-                // Add emoji prefix based on log level
+                // Add emoji prefix and normalize spacing by removing level text
                 let prefixed_line = if line.contains("ERROR") {
-                    format!("✗ {}", line)
+                    // Remove "ERROR " prefix (with trailing space) and add emoji
+                    let cleaned = line.replacen("ERROR ", "", 1);
+                    format!("✗ {}", if cleaned.is_empty() { line } else { cleaned })
                 } else if line.contains("WARN") {
-                    format!("⚠ {}", line)
+                    // Remove "WARN " prefix (with trailing space) and add emoji
+                    let cleaned = line.replacen("WARN ", "", 1);
+                    format!("⚠ {}", if cleaned.is_empty() { line } else { cleaned })
                 } else if line.contains("INFO") {
-                    format!("✓ {}", line)
+                    // Remove "INFO " prefix (with trailing space) and add emoji
+                    let cleaned = line.replacen("INFO ", "", 1);
+                    format!("✓ {}", if cleaned.is_empty() { line } else { cleaned })
                 } else if line.contains("DEBUG") {
-                    format!("• {}", line)
+                    // Remove "DEBUG " prefix (with trailing space) and add emoji
+                    let cleaned = line.replacen("DEBUG ", "", 1);
+                    format!("• {}", if cleaned.is_empty() { line } else { cleaned })
                 } else {
                     line
                 };

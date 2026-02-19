@@ -118,16 +118,82 @@ impl SimpleMcpClient {
         }
 
         let result: serde_json::Value = response.json().await?;
-        
+
         // Parse the response to extract tool result
         if let Some(result_value) = result.get("result") {
-            // Convert result to string representation
-            Ok(serde_json::to_string_pretty(result_value)?)
+            // Check if this is a thumbnail or image-related tool call
+            // and if the result contains base64 data
+            let result_str = serde_json::to_string_pretty(result_value)?;
+            
+            // Try to detect and convert base64 image data to proper MCP image content
+            if let Some(converted) = self.try_convert_to_image_content(name, result_value).await {
+                Ok(converted)
+            } else {
+                Ok(result_str)
+            }
         } else if let Some(error) = result.get("error") {
             anyhow::bail!("Tool call error: {}", error);
         } else {
             Ok("Tool executed successfully (no result)".to_string())
         }
+    }
+
+    /// Try to convert a tool result to MCP image content if it contains base64 image data
+    /// 
+    /// This is a workaround for MCP servers that return base64 as plain text instead of
+    /// proper MCP image content. Detects thumbnail and image-related tool calls.
+    async fn try_convert_to_image_content(&self, tool_name: &str, result_value: &serde_json::Value) -> Option<String> {
+        // Check if this is likely an image/thumbnail tool
+        let is_image_tool = tool_name.to_lowercase().contains("thumbnail") 
+            || tool_name.to_lowercase().contains("image");
+        
+        if !is_image_tool {
+            return None;
+        }
+
+        // Try to extract base64 data from the result
+        let base64_data = if let Some(text) = result_value.as_str() {
+            // Result is a plain string (likely base64)
+            Some(text.to_string())
+        } else if let Some(obj) = result_value.as_object() {
+            // Result might be an object with a "text" or "data" field
+            obj.get("text")
+                .or_else(|| obj.get("data"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        } else {
+            None
+        }?;
+
+        // Validate that it looks like base64 (contains only valid characters and is reasonably long)
+        if base64_data.is_empty() || !base64_data.chars().all(|c| c.is_alphanumeric() || c == '+' || c == '/' || c == '=') {
+            return None;
+        }
+
+        // Determine MIME type from base64 signature or default to PNG
+        let mime_type = if base64_data.starts_with("iVBORw0KGgo") {
+            "image/png"
+        } else if base64_data.starts_with("/9j/") {
+            "image/jpeg"
+        } else if base64_data.starts_with("R0lGOD") {
+            "image/gif"
+        } else if base64_data.starts_with("UklGR") {
+            "image/webp"
+        } else {
+            "image/png" // Default assumption for thumbnails
+        };
+
+        // Create proper MCP image content structure
+        // This wraps the base64 data in the MCP protocol format
+        let image_content = json!({
+            "content": [{
+                "type": "image",
+                "data": base64_data,
+                "mimeType": mime_type
+            }]
+        });
+
+        Some(serde_json::to_string_pretty(&image_content).ok()?)
     }
 }
 
@@ -533,13 +599,37 @@ You are running on the user's local machine via Ollama."#
             debug!("Sending prompt to agent with model: {}", self.model_name);
             agent.prompt(prompt_text).await
         }.map_err(|e| {
-            anyhow::anyhow!(
-                "Ollama request failed: {}\n\n\
+            let error_str = e.to_string();
+            
+            // Provide specific error messages based on error type
+            if error_str.contains("MaxTurnError") {
+                anyhow::anyhow!(
+                    "The model got stuck in a repetitive loop. This happens when:\n\
+                     • A tool keeps failing and the model retries indefinitely\n\
+                     • The model's tool requests don't match what the tools expect\n\
+                     • The conversation history is in a confused state\n\n\
+                     To fix this:\n\
+                     1. Type /clear to reset the conversation\n\
+                     2. Try your request again with different wording\n\
+                     3. If using tools, check that the tool arguments are correct"
+                )
+            } else if error_str.contains("connection") || error_str.contains("connect") {
+                anyhow::anyhow!(
+                    "Cannot connect to Ollama: {}\n\n\
                      Make sure Ollama is running (`ollama serve`) and \
                      the model is pulled (`ollama pull {}`).",
-                e,
-                self.model_name
-            )
+                    e,
+                    self.model_name
+                )
+            } else {
+                anyhow::anyhow!(
+                    "Ollama request failed: {}\n\n\
+                     Make sure Ollama is running (`ollama serve`) and \
+                     the model is pulled (`ollama pull {}`).",
+                    e,
+                    self.model_name
+                )
+            }
         })?;
 
         debug!("Received response: {} chars", response.len());
@@ -644,4 +734,102 @@ pub async fn execute_tool_call(tool_name: &str, arguments: &str) -> Result<Strin
     };
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn test_detects_thumbnail_tool_name() {
+        let client = SimpleMcpClient::new("http://localhost:9999".to_string());
+        
+        // Simulate a base64 PNG image (1x1 pixel transparent PNG)
+        let base64_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        let result_value = json!(base64_png);
+        
+        let converted = client.try_convert_to_image_content("pcli2_asset_thumbnail", &result_value).await;
+        
+        assert!(converted.is_some());
+        let converted_str = converted.unwrap();
+        assert!(converted_str.contains("\"type\": \"image\""));
+        assert!(converted_str.contains("\"mimeType\": \"image/png\""));
+        assert!(converted_str.contains(base64_png));
+    }
+
+    #[tokio::test]
+    async fn test_detects_jpeg_mime_type() {
+        let client = SimpleMcpClient::new("http://localhost:9999".to_string());
+        
+        // Simulate a base64 JPEG image (starts with /9j/)
+        let base64_jpeg = "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAn/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBEQCEAwEPwAB//9k=";
+        let result_value = json!(base64_jpeg);
+        
+        let converted = client.try_convert_to_image_content("pcli2_asset_thumbnail", &result_value).await;
+        
+        assert!(converted.is_some());
+        let converted_str = converted.unwrap();
+        assert!(converted_str.contains("\"mimeType\": \"image/jpeg\""));
+    }
+
+    #[tokio::test]
+    async fn test_rejects_non_image_tool() {
+        let client = SimpleMcpClient::new("http://localhost:9999".to_string());
+        
+        let base64_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        let result_value = json!(base64_data);
+        
+        // Tool name doesn't contain 'thumbnail' or 'image'
+        let converted = client.try_convert_to_image_content("pcli2_folder_list", &result_value).await;
+        
+        assert!(converted.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_rejects_invalid_base64() {
+        let client = SimpleMcpClient::new("http://localhost:9999".to_string());
+        
+        // Invalid base64 (contains invalid characters)
+        let invalid_base64 = "This is not valid base64!!!";
+        let result_value = json!(invalid_base64);
+        
+        let converted = client.try_convert_to_image_content("pcli2_asset_thumbnail", &result_value).await;
+        
+        assert!(converted.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_handles_object_result_with_data_field() {
+        let client = SimpleMcpClient::new("http://localhost:9999".to_string());
+        
+        let base64_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        let result_value = json!({
+            "data": base64_png,
+            "other_field": "value"
+        });
+        
+        let converted = client.try_convert_to_image_content("pcli2_asset_thumbnail", &result_value).await;
+        
+        assert!(converted.is_some());
+        let converted_str = converted.unwrap();
+        assert!(converted_str.contains("\"type\": \"image\""));
+        assert!(converted_str.contains(base64_png));
+    }
+
+    #[tokio::test]
+    async fn test_handles_object_result_with_text_field() {
+        let client = SimpleMcpClient::new("http://localhost:9999".to_string());
+        
+        let base64_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        let result_value = json!({
+            "text": base64_png
+        });
+        
+        let converted = client.try_convert_to_image_content("pcli2_image_get", &result_value).await;
+        
+        assert!(converted.is_some());
+        let converted_str = converted.unwrap();
+        assert!(converted_str.contains("\"type\": \"image\""));
+    }
 }

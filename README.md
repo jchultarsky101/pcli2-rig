@@ -235,10 +235,16 @@ export OLLAMA_HOST=http://localhost:11434
 |-----|--------|
 | `Ctrl+C` | Quit application |
 | `Ctrl+K` | Clear chat history |
-| `Ctrl+M` | Toggle mouse mode (enable/disable text selection) |
+| `Ctrl+M` | Toggle mouse mode |
 | `Tab` | Switch focus between panes |
 | `Shift+Tab` | Switch focus backwards |
 | `Esc` | Close modal dialogs **or** cancel in-flight LLM request |
+
+**Mouse Mode (Ctrl+M):**
+- **Enabled**: Left-click to focus panes, scroll wheel to scroll
+- **Disabled** (default): Select and copy text from terminal
+
+When mouse mode is enabled, clicking on any pane (Chat, Input, or Logs) will focus that pane.
 
 #### Input Pane (when focused)
 
