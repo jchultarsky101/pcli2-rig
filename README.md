@@ -99,21 +99,41 @@ pcli2-rig --verbose
 
 ### MCP Integration
 
+#### Using pcli2-mcp Server
+
+1. **Build and start the MCP server**:
+   ```bash
+   # Build pcli2-mcp
+   cargo build --release
+
+   # Start the server (default port 8080)
+   ./target/release/pcli2-mcp serve --port 8080
+   ```
+
+2. **Connect pcli2-rig to the MCP server**:
+   ```bash
+   # Add MCP server URL directly
+   pcli2-rig --mcp-remote http://localhost:8080/mcp
+
+   # Multiple MCP servers
+   pcli2-rig --mcp-remote http://localhost:8080/mcp --mcp-remote http://localhost:8081/mcp
+   ```
+
+#### Using pcli2-mcp Config Output
+
 ```bash
 # Load MCP servers from pcli2-mcp config (pipe from stdin)
 pcli2-mcp config | pcli2-rig --mcp-config -
 
-# Load MCP servers from config file
-pcli2-rig --mcp-config /path/to/mcp-config.json
-
-# Add MCP server URL directly
-pcli2-rig --mcp-remote http://localhost:8080/mcp
-
-# Multiple MCP servers
-pcli2-rig --mcp-remote http://localhost:8080/mcp --mcp-remote http://localhost:8081/mcp
-
 # Combine config file with direct URLs
 pcli2-mcp config | pcli2-rig --mcp-config - --mcp-remote http://localhost:9000/mcp
+```
+
+#### Loading from Config File
+
+```bash
+# Load MCP servers from config file
+pcli2-rig --mcp-config /path/to/mcp-config.json
 ```
 
 ### Environment Variables
@@ -319,6 +339,18 @@ Try resizing your terminal or check that your terminal supports UTF-8.
 | `/mcp` | Show MCP server status |
 | `/mcp list` | List configured MCP servers |
 | `/mcp tools` | Show available MCP tools |
+
+## CLI Options
+
+| Option | Description |
+|--------|-------------|
+| `--model <MODEL>` | Set the Ollama model to use |
+| `--host <HOST>` | Set the Ollama server host (default: `http://localhost:11434`) |
+| `--mcp-config <PATH>` | Load MCP servers from config file (use `-` for stdin) |
+| `--mcp-remote <URL>` | Add an MCP server URL directly |
+| `--yolo` | Skip tool confirmation prompts |
+| `--verbose` | Enable verbose logging |
+| `--help`, `-h` | Show CLI help |
 
 ## Development
 
