@@ -213,20 +213,20 @@ impl std::io::Write for DualWriter {
             {
                 // Add emoji prefix and normalize spacing by removing level text
                 let prefixed_line = if line.contains("ERROR") {
-                    // Remove "ERROR " prefix and add emoji
-                    let cleaned = line.replacen("ERROR", "", 1).trim_start().to_string();
+                    // Remove "ERROR " prefix (with trailing space) and add emoji
+                    let cleaned = line.replacen("ERROR ", "", 1);
                     format!("✗ {}", if cleaned.is_empty() { line } else { cleaned })
                 } else if line.contains("WARN") {
-                    // Remove "WARN " prefix and add emoji
-                    let cleaned = line.replacen("WARN", "", 1).trim_start().to_string();
+                    // Remove "WARN " prefix (with trailing space) and add emoji
+                    let cleaned = line.replacen("WARN ", "", 1);
                     format!("⚠ {}", if cleaned.is_empty() { line } else { cleaned })
                 } else if line.contains("INFO") {
-                    // Remove "INFO " prefix and add emoji
-                    let cleaned = line.replacen("INFO", "", 1).trim_start().to_string();
+                    // Remove "INFO " prefix (with trailing space) and add emoji
+                    let cleaned = line.replacen("INFO ", "", 1);
                     format!("✓ {}", if cleaned.is_empty() { line } else { cleaned })
                 } else if line.contains("DEBUG") {
-                    // Remove "DEBUG " prefix and add emoji
-                    let cleaned = line.replacen("DEBUG", "", 1).trim_start().to_string();
+                    // Remove "DEBUG " prefix (with trailing space) and add emoji
+                    let cleaned = line.replacen("DEBUG ", "", 1);
                     format!("• {}", if cleaned.is_empty() { line } else { cleaned })
                 } else {
                     line
