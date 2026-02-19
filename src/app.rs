@@ -493,6 +493,7 @@ Type /help for available commands · Type /quit to exit
         let cancel_token = CancellationToken::new();
         self.cancel_token = Some(cancel_token.clone());
 
+        tracing::info!("Message submitted to LLM");
         debug!("Message submitted to LLM");
 
         // Clone the input for the spawned task
